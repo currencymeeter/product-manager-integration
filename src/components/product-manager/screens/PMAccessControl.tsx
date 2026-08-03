@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import {
+  usePMData, fetchRoles, updateRolePermissions, fetchCountryAccess, updateCountryAccess,
+} from '../data/pmQueries';
+import {
   Shield, Eye, Copy, Download, Edit3, UserCheck, Globe2,
   Lock, Unlock, Save, Users, Building2, MapPin
 } from 'lucide-react';
@@ -16,28 +19,27 @@ interface PMAccessControlProps {
   permissionType: string;
 }
 
-const mockRoles = [
-  { id: 'ROLE-001', name: 'Boss Owner', level: 1, permissions: { view: true, copy: true, download: true, edit: true } },
-  { id: 'ROLE-002', name: 'CEO', level: 2, permissions: { view: true, copy: true, download: true, edit: true } },
-  { id: 'ROLE-003', name: 'Product Manager', level: 3, permissions: { view: true, copy: true, download: true, edit: true } },
-  { id: 'ROLE-004', name: 'Developer', level: 4, permissions: { view: true, copy: true, download: false, edit: false } },
-  { id: 'ROLE-005', name: 'Franchise Manager', level: 5, permissions: { view: true, copy: false, download: false, edit: false } },
-  { id: 'ROLE-006', name: 'Reseller', level: 6, permissions: { view: true, copy: false, download: false, edit: false } },
-  { id: 'ROLE-007', name: 'Customer', level: 7, permissions: { view: true, copy: false, download: false, edit: false } },
-];
+interface PMRole {
+  id: string;
+  code: string;
+  name: string;
+  level: number;
+  permissions: { view: boolean; copy: boolean; download: boolean; edit: boolean };
+}
 
-const mockCountries = [
-  { id: 'IN', name: 'India', enabled: true, franchises: 12 },
-  { id: 'US', name: 'United States', enabled: true, franchises: 8 },
-  { id: 'UK', name: 'United Kingdom', enabled: true, franchises: 5 },
-  { id: 'AE', name: 'UAE', enabled: false, franchises: 3 },
-  { id: 'SG', name: 'Singapore', enabled: true, franchises: 2 },
-  { id: 'AU', name: 'Australia', enabled: false, franchises: 4 },
-];
+interface PMCountry {
+  id: string;
+  country_code: string;
+  name: string;
+  enabled: boolean;
+  franchises: number;
+}
 
 const PMAccessControl: React.FC<PMAccessControlProps> = ({ permissionType }) => {
-  const [roles, setRoles] = useState(mockRoles);
-  const [countries, setCountries] = useState(mockCountries);
+  const { data: roleData, refetch: refetchRoles } = usePMData(fetchRoles, []);
+  const { data: countryData, refetch: refetchCountries } = usePMData(fetchCountryAccess, []);
+  const roles = (roleData ?? []) as PMRole[];
+  const countries = (countryData ?? []) as PMCountry[];
 
   const getTitle = () => {
     switch (permissionType) {
@@ -63,31 +65,33 @@ const PMAccessControl: React.FC<PMAccessControlProps> = ({ permissionType }) => 
     }
   };
 
-  const handlePermissionToggle = (roleId: string, permission: string) => {
-    setRoles(prev => prev.map(r => 
-      r.id === roleId 
-        ? { ...r, permissions: { ...r.permissions, [permission]: !r.permissions[permission as keyof typeof r.permissions] } }
-        : r
-    ));
-    const role = roles.find(r => r.id === roleId);
-    toast.success(`Permission updated`, {
-      description: `${role?.name} - ${permission}`
-    });
+  const handlePermissionToggle = async (role: PMRole, permission: keyof PMRole['permissions']) => {
+    try {
+      await updateRolePermissions(role.id, {
+        ...role.permissions,
+        [permission]: !role.permissions[permission],
+      });
+      await refetchRoles();
+      toast.success('Permission updated', { description: `${role.name} - ${permission}` });
+    } catch {
+      toast.error('Failed to update permission');
+    }
   };
 
-  const handleCountryToggle = (countryId: string) => {
-    setCountries(prev => prev.map(c => 
-      c.id === countryId ? { ...c, enabled: !c.enabled } : c
-    ));
-    const country = countries.find(c => c.id === countryId);
-    toast.success(`Country ${country?.enabled ? 'disabled' : 'enabled'}`, {
-      description: country?.name
-    });
+  const handleCountryToggle = async (country: PMCountry) => {
+    try {
+      await updateCountryAccess(country.id, !country.enabled);
+      await refetchCountries();
+      toast.success(`Country ${country.enabled ? 'disabled' : 'enabled'}`, { description: country.name });
+    } catch {
+      toast.error('Failed to update country access');
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    await Promise.all([refetchRoles(), refetchCountries()]);
     toast.success('Permissions saved successfully', {
-      description: 'All changes have been applied'
+      description: 'All changes have been applied',
     });
   };
 
@@ -135,12 +139,12 @@ const PMAccessControl: React.FC<PMAccessControlProps> = ({ permissionType }) => 
                         </div>
                         <div>
                           <h3 className="font-medium">{country.name}</h3>
-                          <p className="text-xs text-muted-foreground">{country.id}</p>
+                          <p className="text-xs text-muted-foreground">{country.country_code}</p>
                         </div>
                       </div>
                       <Switch 
                         checked={country.enabled}
-                        onCheckedChange={() => handleCountryToggle(country.id)}
+                        onCheckedChange={() => handleCountryToggle(country)}
                       />
                     </div>
                     <div className="flex items-center justify-between text-sm">
@@ -210,13 +214,13 @@ const PMAccessControl: React.FC<PMAccessControlProps> = ({ permissionType }) => 
                     </div>
                     <div>
                       <p className="font-medium text-sm">{role.name}</p>
-                      <p className="text-xs text-muted-foreground">{role.id}</p>
+                      <p className="text-xs text-muted-foreground">{role.code}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <Switch 
                       checked={role.permissions[permissionKey]}
-                      onCheckedChange={() => handlePermissionToggle(role.id, permissionKey)}
+                      onCheckedChange={() => handlePermissionToggle(role, permissionKey)}
                     />
                     <Badge variant={role.permissions[permissionKey] ? 'default' : 'secondary'}>
                       {role.permissions[permissionKey] ? 'Allowed' : 'Denied'}

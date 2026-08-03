@@ -8,6 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import {
+  usePMData, fetchServers, fetchDeployments, fetchDeploymentLogs, fetchProductOptions,
+  insertDeployment, insertDeploymentLog, updateDeployment,
+} from '../data/pmQueries';
+import {
   Rocket, Server, GitBranch, RotateCcw, StopCircle, FileText,
   CheckCircle2, Clock, AlertCircle, Play, Pause, RefreshCw,
   Globe2, Database, Cpu, Activity
@@ -17,34 +21,38 @@ interface PMDeploymentControlProps {
   deploymentType: string;
 }
 
-const mockServers = [
-  { id: 'SRV-001', name: 'Production Server 1', region: 'India', status: 'online', load: 65 },
-  { id: 'SRV-002', name: 'Production Server 2', region: 'US East', status: 'online', load: 42 },
-  { id: 'SRV-003', name: 'Staging Server', region: 'India', status: 'online', load: 28 },
-  { id: 'SRV-004', name: 'Dev Server', region: 'India', status: 'maintenance', load: 0 },
-];
-
-const mockDeployments = [
-  { id: 'DEP-001', product: 'ERP Suite', version: 'v3.2.1', environment: 'production', status: 'deployed', server: 'SRV-001', deployedAt: '2024-01-15 10:30' },
-  { id: 'DEP-002', product: 'CRM Pro', version: 'v2.8.0', environment: 'staging', status: 'deploying', server: 'SRV-003', deployedAt: '2024-01-15 11:00' },
-  { id: 'DEP-003', product: 'HR System', version: 'v4.1.2', environment: 'production', status: 'deployed', server: 'SRV-002', deployedAt: '2024-01-14 15:45' },
-  { id: 'DEP-004', product: 'Inventory', version: 'v1.0.0', environment: 'staging', status: 'failed', server: 'SRV-003', deployedAt: '2024-01-14 09:20' },
-];
-
-const mockLogs = [
-  { id: 'LOG-001', timestamp: '2024-01-15 11:02:45', level: 'info', message: 'Deployment started for CRM Pro v2.8.0' },
-  { id: 'LOG-002', timestamp: '2024-01-15 11:02:50', level: 'info', message: 'Pulling latest build from repository...' },
-  { id: 'LOG-003', timestamp: '2024-01-15 11:03:15', level: 'info', message: 'Build verified successfully' },
-  { id: 'LOG-004', timestamp: '2024-01-15 11:03:30', level: 'warning', message: 'High memory usage detected on staging server' },
-  { id: 'LOG-005', timestamp: '2024-01-15 11:04:00', level: 'info', message: 'Deploying to staging environment...' },
-  { id: 'LOG-006', timestamp: '2024-01-15 11:05:00', level: 'success', message: 'Deployment completed successfully' },
-];
-
 const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentType }) => {
   const [selectedServer, setSelectedServer] = useState('');
   const [selectedEnv, setSelectedEnv] = useState('staging');
+  const [selectedProduct, setSelectedProduct] = useState('');
   const [deploying, setDeploying] = useState(false);
   const [deployProgress, setDeployProgress] = useState(0);
+
+  const { data: serverData } = usePMData(fetchServers, []);
+  const { data: deploymentData, refetch: refetchDeployments } = usePMData(fetchDeployments, []);
+  const { data: logData, refetch: refetchLogs } = usePMData(fetchDeploymentLogs, []);
+  const { data: productData } = usePMData(fetchProductOptions, []);
+
+  const servers = ((serverData ?? []) as any[]).map(s => ({
+    id: s.id, code: s.code, name: s.name, region: s.region, status: s.status, load: s.load,
+  }));
+  const deployments = ((deploymentData ?? []) as any[]).map(d => ({
+    id: d.id,
+    reference: d.reference,
+    product: d.product_name,
+    version: d.version,
+    environment: d.environment,
+    status: d.status,
+    server: d.server_code,
+    deployedAt: new Date(d.deployed_at).toLocaleString(),
+  }));
+  const logs = ((logData ?? []) as any[]).map(l => ({
+    id: l.id,
+    timestamp: new Date(l.created_at).toLocaleString(),
+    level: l.level,
+    message: l.message,
+  }));
+  const products = ((productData ?? []) as any[]);
 
   const getTitle = () => {
     switch (deploymentType) {
@@ -58,26 +66,80 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
     }
   };
 
-  const handleDeploy = () => {
+  const handleDeploy = async () => {
+    const product = products.find(p => p.product_id === selectedProduct);
+    const server = servers.find(s => s.id === selectedServer);
+    if (!product || !server) {
+      toast.error('Select a product and a target server');
+      return;
+    }
     setDeploying(true);
-    setDeployProgress(0);
-    const interval = setInterval(() => {
-      setDeployProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setDeploying(false);
-          toast.success('Deployment completed successfully');
-          return 100;
-        }
-        return prev + 5;
+    setDeployProgress(10);
+    const reference = `DEP-${Date.now().toString(36).toUpperCase()}`;
+    try {
+      await insertDeployment({
+        reference,
+        product_name: product.product_name,
+        version: product.version,
+        environment: selectedEnv,
+        status: 'deploying',
+        server_code: server.code,
+        deployed_at: new Date().toISOString(),
       });
-    }, 200);
+      await insertDeploymentLog({
+        deployment_reference: reference,
+        level: 'info',
+        message: `Deployment started for ${product.product_name} ${product.version} on ${server.name}`,
+      });
+      setDeployProgress(60);
+      await refetchDeployments();
+      const created = ((await fetchDeployments()) as any[]).find(d => d.reference === reference);
+      if (created) {
+        await updateDeployment(created.id, { status: 'deployed' });
+        await insertDeploymentLog({
+          deployment_reference: reference,
+          level: 'success',
+          message: `Deployment completed for ${product.product_name} ${product.version}`,
+        });
+      }
+      setDeployProgress(100);
+      await Promise.all([refetchDeployments(), refetchLogs()]);
+      toast.success('Deployment completed successfully');
+    } catch {
+      await insertDeploymentLog({
+        deployment_reference: reference,
+        level: 'error',
+        message: 'Deployment failed',
+      }).catch(() => undefined);
+      await refetchLogs();
+      toast.error('Deployment failed');
+    } finally {
+      setDeploying(false);
+    }
   };
 
-  const handleAction = (action: string, item: string) => {
-    toast.success(`${action} action triggered`, {
-      description: item
-    });
+  const handleAction = async (action: string, deployment: { id: string; reference: string; product: string }) => {
+    try {
+      if (action === 'Rollback') {
+        await updateDeployment(deployment.id, { status: 'rolled-back' });
+        await insertDeploymentLog({
+          deployment_reference: deployment.reference,
+          level: 'warning',
+          message: `Rollback executed for ${deployment.product}`,
+        });
+      } else if (action === 'Stop') {
+        await updateDeployment(deployment.id, { status: 'stopped' });
+        await insertDeploymentLog({
+          deployment_reference: deployment.reference,
+          level: 'warning',
+          message: `Deployment stopped for ${deployment.product}`,
+        });
+      }
+      await Promise.all([refetchDeployments(), refetchLogs()]);
+      toast.success(`${action} completed`, { description: deployment.product });
+    } catch {
+      toast.error(`${action} failed`);
+    }
   };
 
   if (deploymentType === 'deployment-logs') {
@@ -97,7 +159,7 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
               <p className="text-sm text-muted-foreground">Real-time deployment logs</p>
             </div>
           </div>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => refetchLogs()}>
             <RefreshCw className="w-4 h-4" /> Refresh
           </Button>
         </motion.div>
@@ -106,7 +168,7 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-16rem)]">
               <div className="p-4 font-mono text-xs space-y-1">
-                {mockLogs.map((log) => (
+                {logs.map((log) => (
                   <div key={log.id} className="flex items-start gap-2">
                     <span className="text-slate-500">{log.timestamp}</span>
                     <span className={
@@ -145,7 +207,7 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {mockServers.map((server, index) => (
+          {servers.map((server, index) => (
             <motion.div
               key={server.id}
               initial={{ opacity: 0, y: 20 }}
@@ -214,14 +276,16 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Select Product</label>
-                <Select>
+                <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose product" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="erp">ERP Suite v3.2.1</SelectItem>
-                    <SelectItem value="crm">CRM Pro v2.8.0</SelectItem>
-                    <SelectItem value="hr">HR System v4.1.2</SelectItem>
+                    {products.map(p => (
+                      <SelectItem key={p.product_id} value={p.product_id}>
+                        {p.product_name} {p.version}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -239,12 +303,12 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
               </div>
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Target Server</label>
-                <Select>
+                <Select value={selectedServer} onValueChange={setSelectedServer}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose server" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockServers.filter(s => s.status === 'online').map(s => (
+                    {servers.filter(s => s.status === 'online').map(s => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -312,7 +376,7 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
 
       <ScrollArea className="h-[calc(100vh-14rem)]">
         <div className="space-y-3">
-          {mockDeployments.map((dep, index) => (
+          {deployments.map((dep, index) => (
             <motion.div
               key={dep.id}
               initial={{ opacity: 0, y: 20 }}
@@ -353,16 +417,16 @@ const PMDeploymentControl: React.FC<PMDeploymentControlProps> = ({ deploymentTyp
                   </div>
                   <div className="flex items-center gap-1 mt-3">
                     {deploymentType === 'rollback' && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-500/30 text-amber-400" onClick={() => handleAction('Rollback', dep.product)}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-amber-500/30 text-amber-400" onClick={() => handleAction('Rollback', dep)}>
                         <RotateCcw className="w-3.5 h-3.5" /> Rollback
                       </Button>
                     )}
                     {deploymentType === 'stop-deployment' && dep.status === 'deploying' && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-red-500/30 text-red-400" onClick={() => handleAction('Stop', dep.product)}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-red-500/30 text-red-400" onClick={() => handleAction('Stop', dep)}>
                         <StopCircle className="w-3.5 h-3.5" /> Stop
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('View Logs', dep.product)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('View Logs', dep)}>
                       <FileText className="w-3.5 h-3.5" /> Logs
                     </Button>
                   </div>

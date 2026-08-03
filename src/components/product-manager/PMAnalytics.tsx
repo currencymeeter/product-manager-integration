@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePMData, fetchAnalytics } from './data/pmQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,33 +28,12 @@ interface AnalyticsData {
   color: string;
 }
 
-const productPerformance: AnalyticsData[] = [
-  { label: 'CRM Enterprise', value: 245, change: 12.5, color: 'bg-blue-500' },
-  { label: 'HR Management Pro', value: 189, change: 8.3, color: 'bg-green-500' },
-  { label: 'Inventory Tracker', value: 156, change: -2.1, color: 'bg-amber-500' },
-  { label: 'POS System', value: 134, change: 15.8, color: 'bg-purple-500' },
-  { label: 'Accounting Suite', value: 98, change: 5.4, color: 'bg-cyan-500' },
-];
-
-const demoFunnel = [
-  { stage: 'Demo Views', count: 1250, percentage: 100 },
-  { stage: 'Started Demo', count: 875, percentage: 70 },
-  { stage: 'Completed Demo', count: 438, percentage: 35 },
-  { stage: 'Requested Quote', count: 175, percentage: 14 },
-  { stage: 'Converted', count: 88, percentage: 7 },
-];
-
-const countryData = [
-  { country: 'United States', sales: 1245, percentage: 35 },
-  { country: 'United Kingdom', sales: 567, percentage: 16 },
-  { country: 'Germany', sales: 423, percentage: 12 },
-  { country: 'India', sales: 389, percentage: 11 },
-  { country: 'Canada', sales: 312, percentage: 9 },
-  { country: 'Australia', sales: 287, percentage: 8 },
-  { country: 'Others', sales: 320, percentage: 9 },
-];
-
 const PMAnalytics: React.FC = () => {
+  const { data } = usePMData(fetchAnalytics, []);
+  const productPerformance: AnalyticsData[] = data?.performance ?? [];
+  const demoFunnel: { stage: string; count: number; percentage: number }[] = data?.demoFunnel ?? [];
+  const countryData: { country: string; sales: number; percentage: number }[] = data?.countryData ?? [];
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}

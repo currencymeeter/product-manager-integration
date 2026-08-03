@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { usePMData, fetchInventory, restockInventory, setAutoRestock } from './data/pmQueries';
 import {
   Warehouse,
   Package,
@@ -30,16 +31,9 @@ interface InventoryItem {
   ai_forecast?: string;
 }
 
-const mockInventory: InventoryItem[] = [
-  { id: '1', product_name: 'CRM Enterprise', stock_type: 'license', total_stock: 500, available_stock: 342, reserved: 58, low_threshold: 50, auto_restock: true, status: 'healthy', ai_forecast: 'Demand expected to increase by 15% next month' },
-  { id: '2', product_name: 'HR Management Pro', stock_type: 'license', total_stock: 200, available_stock: 45, reserved: 10, low_threshold: 40, auto_restock: true, status: 'low', ai_forecast: 'Consider restocking within 2 weeks' },
-  { id: '3', product_name: 'Inventory Tracker', stock_type: 'license', total_stock: 100, available_stock: 12, reserved: 5, low_threshold: 20, auto_restock: false, status: 'critical', ai_forecast: 'Urgent: Stock will deplete in 5 days' },
-  { id: '4', product_name: 'POS System', stock_type: 'unlimited', total_stock: 999, available_stock: 999, reserved: 0, low_threshold: 0, auto_restock: false, status: 'healthy' },
-  { id: '5', product_name: 'Accounting Suite', stock_type: 'license', total_stock: 300, available_stock: 187, reserved: 23, low_threshold: 30, auto_restock: true, status: 'healthy' },
-];
-
 const PMInventory: React.FC = () => {
-  const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
+  const { data, loading, refetch } = usePMData(fetchInventory, []);
+  const inventory = (data ?? []) as InventoryItem[];
 
   const stats = {
     totalProducts: inventory.length,
@@ -68,13 +62,24 @@ const PMInventory: React.FC = () => {
     return Math.round((item.available_stock / item.total_stock) * 100);
   };
 
-  const handleRestock = (itemId: string) => {
-    setInventory(inventory.map(i => 
-      i.id === itemId 
-        ? { ...i, available_stock: i.total_stock, status: 'healthy' as const }
-        : i
-    ));
-    toast.success('Inventory restocked');
+  const handleRestock = async (item: InventoryItem) => {
+    try {
+      await restockInventory(item.id, item.total_stock);
+      await refetch();
+      toast.success('Inventory restocked', { description: item.product_name });
+    } catch {
+      toast.error('Failed to restock inventory');
+    }
+  };
+
+  const handleAutoRestock = async (item: InventoryItem) => {
+    try {
+      await setAutoRestock(item.id, !item.auto_restock);
+      await refetch();
+      toast.success(`Auto-restock ${item.auto_restock ? 'disabled' : 'enabled'}`, { description: item.product_name });
+    } catch {
+      toast.error('Failed to update auto-restock');
+    }
   };
 
   return (
@@ -232,7 +237,11 @@ const PMInventory: React.FC = () => {
                   </TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell>
-                    <Badge variant={item.auto_restock ? 'default' : 'outline'}>
+                    <Badge
+                      variant={item.auto_restock ? 'default' : 'outline'}
+                      className="cursor-pointer"
+                      onClick={() => handleAutoRestock(item)}
+                    >
                       {item.auto_restock ? 'ON' : 'OFF'}
                     </Badge>
                   </TableCell>
@@ -242,7 +251,7 @@ const PMInventory: React.FC = () => {
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleRestock(item.id)}
+                          onClick={() => handleRestock(item)}
                         >
                           <RefreshCw className="w-3 h-3 mr-1" />
                           Restock
@@ -252,6 +261,13 @@ const PMInventory: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ))}
+              {!loading && inventory.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                    No inventory records yet.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { usePMData, fetchOrders, updateOrderStatus } from './data/pmQueries';
 import {
   ShoppingCart,
   Search,
@@ -40,15 +41,9 @@ interface Order {
   created_at: string;
 }
 
-const mockOrders: Order[] = [
-  { id: '1', order_number: 'ORD-2024-001', product_name: 'CRM Enterprise', customer_name: 'John Smith', customer_email: 'john@company.com', quantity: 5, total: 495, currency: 'USD', status: 'completed', payment_status: 'paid', license_key: 'LIC-XXXXX-XXXXX', created_at: '2024-01-15' },
-  { id: '2', order_number: 'ORD-2024-002', product_name: 'HR Management Pro', customer_name: 'Sarah Johnson', customer_email: 'sarah@corp.io', quantity: 2, total: 198, currency: 'USD', status: 'processing', payment_status: 'paid', created_at: '2024-01-16' },
-  { id: '3', order_number: 'ORD-2024-003', product_name: 'Inventory Tracker', customer_name: 'Mike Brown', customer_email: 'mike@startup.co', quantity: 1, total: 49, currency: 'USD', status: 'pending', payment_status: 'pending', created_at: '2024-01-17' },
-  { id: '4', order_number: 'ORD-2024-004', product_name: 'POS System', customer_name: 'Emma Wilson', customer_email: 'emma@retail.com', quantity: 3, total: 297, currency: 'USD', status: 'cancelled', payment_status: 'refunded', created_at: '2024-01-14' },
-];
-
 const PMOrders: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const { data, refetch } = usePMData(fetchOrders, []);
+  const orders = (data ?? []) as Order[];
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -66,29 +61,41 @@ const PMOrders: React.FC = () => {
     setShowViewDialog(true);
   };
 
-  const handleCancelOrder = (orderId: string) => {
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, status: 'cancelled' as const, payment_status: 'refunded' as const } : o
-    ));
-    toast.success('Order cancelled and refunded');
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      await updateOrderStatus(orderId, { status: 'cancelled', payment_status: 'refunded' });
+      await refetch();
+      toast.success('Order cancelled and refunded');
+    } catch {
+      toast.error('Failed to cancel order');
+    }
   };
 
-  const handleRefund = (orderId: string) => {
-    setOrders(orders.map(o => 
-      o.id === orderId ? { ...o, status: 'refunded' as const, payment_status: 'refunded' as const } : o
-    ));
-    toast.success('Refund processed');
+  const handleRefund = async (orderId: string) => {
+    try {
+      await updateOrderStatus(orderId, { status: 'refunded', payment_status: 'refunded' });
+      await refetch();
+      toast.success('Refund processed');
+    } catch {
+      toast.error('Failed to process refund');
+    }
   };
 
   const handleGenerateInvoice = (order: Order) => {
     toast.success(`Invoice generated for ${order.order_number}`);
   };
 
-  const handleDeliverLicense = (order: Order) => {
-    setOrders(orders.map(o => 
-      o.id === order.id ? { ...o, license_key: `LIC-${Date.now().toString(36).toUpperCase()}`, status: 'completed' as const } : o
-    ));
-    toast.success('License delivered to customer');
+  const handleDeliverLicense = async (order: Order) => {
+    try {
+      await updateOrderStatus(order.id, {
+        license_key: `LIC-${Date.now().toString(36).toUpperCase()}`,
+        status: 'completed',
+      });
+      await refetch();
+      toast.success('License delivered to customer');
+    } catch {
+      toast.error('Failed to deliver license');
+    }
   };
 
   const getStatusBadge = (status: string) => {

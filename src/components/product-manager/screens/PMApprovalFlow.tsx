@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { usePMData, fetchApprovals, decideApproval } from '../data/pmQueries';
 import {
   CheckCircle2, XCircle, Clock, AlertCircle, Rocket, GitBranch,
   Cpu, Shield, User, Calendar, MessageSquare, AlertTriangle
@@ -15,52 +16,34 @@ interface PMApprovalFlowProps {
   approvalType: string;
 }
 
-const mockApprovals = [
-  { 
-    id: 'APR-001', 
-    type: 'deployment', 
-    title: 'Deploy ERP Suite v3.2.1 to Production', 
-    requestedBy: 'John Dev', 
-    requestedAt: '2024-01-15 10:00',
-    status: 'pending',
-    priority: 'high',
-    details: 'Critical bug fixes and new feature deployment'
-  },
-  { 
-    id: 'APR-002', 
-    type: 'version', 
-    title: 'Approve CRM Pro v2.9.0 Release', 
-    requestedBy: 'Sarah PM', 
-    requestedAt: '2024-01-15 09:30',
-    status: 'pending',
-    priority: 'medium',
-    details: 'New dashboard analytics and performance improvements'
-  },
-  { 
-    id: 'APR-003', 
-    type: 'module', 
-    title: 'Enable AI Assistant Module', 
-    requestedBy: 'Mike Tech', 
-    requestedAt: '2024-01-14 16:00',
-    status: 'approved',
-    priority: 'low',
-    details: 'Optional AI module for customer support'
-  },
-  { 
-    id: 'APR-004', 
-    type: 'deployment', 
-    title: 'Deploy HR System Hotfix', 
-    requestedBy: 'Lisa Support', 
-    requestedAt: '2024-01-14 14:00',
-    status: 'rejected',
-    priority: 'high',
-    details: 'Emergency fix for payroll calculation issue'
-  },
-];
+interface PMApproval {
+  id: string;
+  reference: string;
+  type: string;
+  title: string;
+  requestedBy: string;
+  requestedAt: string;
+  status: string;
+  priority: string;
+  details: string | null;
+}
 
 const PMApprovalFlow: React.FC<PMApprovalFlowProps> = ({ approvalType }) => {
-  const [approvals, setApprovals] = useState(mockApprovals);
-  const [selectedApproval, setSelectedApproval] = useState<typeof mockApprovals[0] | null>(null);
+  const { data, refetch } = usePMData(fetchApprovals, []);
+  const approvals: PMApproval[] = (data ?? []).map((a: any) => ({
+    id: a.id,
+    reference: a.reference,
+    type: a.type,
+    title: a.title,
+    requestedBy: a.requested_by,
+    requestedAt: new Date(a.requested_at).toLocaleString(),
+    status: a.status,
+    priority: a.priority,
+    details: a.details,
+  }));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedApproval = approvals.find(a => a.id === selectedId) ?? null;
+  const setSelectedApproval = (a: PMApproval | null) => setSelectedId(a?.id ?? null);
   const [comment, setComment] = useState('');
 
   const getTitle = () => {
@@ -82,34 +65,45 @@ const PMApprovalFlow: React.FC<PMApprovalFlowProps> = ({ approvalType }) => {
     }
   };
 
-  const handleApprove = (approvalId: string) => {
-    setApprovals(prev => prev.map(a => 
-      a.id === approvalId ? { ...a, status: 'approved' } : a
-    ));
+  const handleApprove = async (approvalId: string) => {
     const approval = approvals.find(a => a.id === approvalId);
-    toast.success('Approval granted', {
-      description: approval?.title
-    });
-    setSelectedApproval(null);
-    setComment('');
+    try {
+      await decideApproval(approvalId, 'approved', comment || undefined);
+      await refetch();
+      toast.success('Approval granted', { description: approval?.title });
+      setSelectedId(null);
+      setComment('');
+    } catch {
+      toast.error('Failed to approve request');
+    }
   };
 
-  const handleReject = (approvalId: string) => {
-    setApprovals(prev => prev.map(a => 
-      a.id === approvalId ? { ...a, status: 'rejected' } : a
-    ));
+  const handleReject = async (approvalId: string) => {
     const approval = approvals.find(a => a.id === approvalId);
-    toast.error('Approval rejected', {
-      description: approval?.title
-    });
-    setSelectedApproval(null);
-    setComment('');
+    try {
+      await decideApproval(approvalId, 'rejected', comment || undefined);
+      await refetch();
+      toast.error('Approval rejected', { description: approval?.title });
+      setSelectedId(null);
+      setComment('');
+    } catch {
+      toast.error('Failed to reject request');
+    }
   };
 
-  const handleEmergencyOverride = () => {
-    toast.warning('Emergency Override Activated', {
-      description: 'All pending approvals bypassed. This action has been logged.'
-    });
+  const handleEmergencyOverride = async () => {
+    const pending = approvals.filter(a => a.status === 'pending');
+    try {
+      await Promise.all(
+        pending.map(a => decideApproval(a.id, 'approved', 'Emergency override')),
+      );
+      await refetch();
+      toast.warning('Emergency Override Activated', {
+        description: `${pending.length} pending approvals bypassed. This action has been logged.`,
+      });
+    } catch {
+      toast.error('Emergency override failed');
+    }
   };
 
   const getTypeIcon = (type: string) => {

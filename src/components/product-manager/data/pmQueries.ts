@@ -174,6 +174,14 @@ export async function decideApproval(id: string, status: string, note?: string) 
 }
 
 // ---------- Deployments ----------
+export async function fetchProductOptions() {
+  const res = await supabase
+    .from('products')
+    .select('product_id, product_name, version')
+    .order('product_name');
+  return rows<any>(res);
+}
+
 export async function fetchServers() {
   const res = await supabase.from('pm_servers').select('id, code, name, region, status, load').order('name');
   return rows<any>(res);

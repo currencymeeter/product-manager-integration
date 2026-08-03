@@ -244,12 +244,10 @@ export async function deleteBuild(id: string) {
 }
 
 export async function fetchBuildVersions() {
-  const res0 = null;
   const res = await supabase
     .from('pm_build_versions')
     .select('id, reference, version, released_on, changes, author')
     .order('released_on', { ascending: false });
-  void res0;
   return rows<any>(res);
 }
 

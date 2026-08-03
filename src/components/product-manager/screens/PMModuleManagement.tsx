@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { usePMData, fetchModules, updateModule } from '../data/pmQueries';
 import {
   Cpu, Lock, Unlock, Eye, Edit3, History, Power, StopCircle,
   ToggleLeft, UserCheck, Shield, CheckCircle2, XCircle, Settings
@@ -15,19 +16,19 @@ interface PMModuleManagementProps {
   moduleType: string;
 }
 
-const mockModules = [
-  { id: 'MOD-001', name: 'User Authentication', type: 'core', status: 'active', locked: false, roleRestricted: false },
-  { id: 'MOD-002', name: 'Dashboard Analytics', type: 'core', status: 'active', locked: true, roleRestricted: false },
-  { id: 'MOD-003', name: 'Report Generator', type: 'optional', status: 'active', locked: false, roleRestricted: true },
-  { id: 'MOD-004', name: 'API Integration', type: 'optional', status: 'disabled', locked: false, roleRestricted: false },
-  { id: 'MOD-005', name: 'Admin Panel', type: 'role', status: 'active', locked: true, roleRestricted: true },
-  { id: 'MOD-006', name: 'Backup System', type: 'core', status: 'active', locked: false, roleRestricted: false },
-  { id: 'MOD-007', name: 'Email Notifications', type: 'optional', status: 'disabled', locked: false, roleRestricted: false },
-  { id: 'MOD-008', name: 'Multi-Language', type: 'optional', status: 'active', locked: false, roleRestricted: false },
-];
+interface PMModule {
+  id: string;
+  reference: string;
+  name: string;
+  type: string;
+  status: string;
+  locked: boolean;
+  role_restricted: boolean;
+}
 
 const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) => {
-  const [modules, setModules] = useState(mockModules);
+  const { data, refetch } = usePMData(fetchModules, []);
+  const modules = (data ?? []) as PMModule[];
 
   const getTitle = () => {
     switch (moduleType) {
@@ -44,7 +45,7 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
     switch (moduleType) {
       case 'core-modules': return modules.filter(m => m.type === 'core');
       case 'optional-modules': return modules.filter(m => m.type === 'optional');
-      case 'role-modules': return modules.filter(m => m.roleRestricted);
+      case 'role-modules': return modules.filter(m => m.role_restricted);
       case 'locked-modules': return modules.filter(m => m.locked);
       case 'disabled-modules': return modules.filter(m => m.status === 'disabled');
       default: return modules;
@@ -57,26 +58,24 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
     });
   };
 
-  const toggleModuleStatus = (moduleId: string) => {
-    setModules(prev => prev.map(m => 
-      m.id === moduleId 
-        ? { ...m, status: m.status === 'active' ? 'disabled' : 'active' }
-        : m
-    ));
-    const module = modules.find(m => m.id === moduleId);
-    toast.success(`Module ${module?.status === 'active' ? 'disabled' : 'enabled'}`, {
-      description: module?.name
-    });
+  const toggleModuleStatus = async (module: PMModule) => {
+    try {
+      await updateModule(module.id, { status: module.status === 'active' ? 'disabled' : 'active' });
+      await refetch();
+      toast.success(`Module ${module.status === 'active' ? 'disabled' : 'enabled'}`, { description: module.name });
+    } catch {
+      toast.error('Failed to update module status');
+    }
   };
 
-  const toggleLock = (moduleId: string) => {
-    setModules(prev => prev.map(m => 
-      m.id === moduleId ? { ...m, locked: !m.locked } : m
-    ));
-    const module = modules.find(m => m.id === moduleId);
-    toast.success(`Module ${module?.locked ? 'unlocked' : 'locked'}`, {
-      description: module?.name
-    });
+  const toggleLock = async (module: PMModule) => {
+    try {
+      await updateModule(module.id, { locked: !module.locked });
+      await refetch();
+      toast.success(`Module ${module.locked ? 'unlocked' : 'locked'}`, { description: module.name });
+    } catch {
+      toast.error('Failed to update module lock');
+    }
   };
 
   const filteredModules = getFilteredModules();
@@ -129,7 +128,7 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
                       {module.status}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{module.id}</p>
+                  <p className="text-xs text-muted-foreground">{module.reference}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Module Info */}
@@ -142,7 +141,7 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
                         <Lock className="w-2.5 h-2.5 mr-1" /> Locked
                       </Badge>
                     )}
-                    {module.roleRestricted && (
+                    {module.role_restricted && (
                       <Badge variant="outline" className="text-[10px] bg-violet-500/10 text-violet-400 border-violet-500/30">
                         <UserCheck className="w-2.5 h-2.5 mr-1" /> Role
                       </Badge>
@@ -154,7 +153,7 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
                     <span className="text-xs text-muted-foreground">Status</span>
                     <Switch 
                       checked={module.status === 'active'}
-                      onCheckedChange={() => toggleModuleStatus(module.id)}
+                      onCheckedChange={() => toggleModuleStatus(module)}
                       disabled={module.locked}
                     />
                   </div>
@@ -184,7 +183,7 @@ const PMModuleManagement: React.FC<PMModuleManagementProps> = ({ moduleType }) =
                       size="sm" 
                       variant="ghost" 
                       className="h-8 text-[10px] flex-col gap-0.5"
-                      onClick={() => toggleLock(module.id)}
+                      onClick={() => toggleLock(module)}
                     >
                       {module.locked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                       {module.locked ? 'Unlock' : 'Lock'}

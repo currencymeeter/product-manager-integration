@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import {
+  usePMData, fetchBuilds, fetchBuildVersions, updateBuild, deleteBuild,
+  uploadBuildFile, getBuildDownloadUrl,
+} from '../data/pmQueries';
 import {
   FileCode, Upload, Package, Globe2, Archive, Lock, Unlock,
   Eye, Download, Edit3, History, Trash2, FolderOpen, File,
@@ -16,24 +20,35 @@ interface PMFileBuildProps {
   buildType: string;
 }
 
-const mockBuilds = [
-  { id: 'BLD-001', name: 'ERP-Suite-v3.2.1.apk', type: 'apk', size: '45.2 MB', status: 'ready', locked: true, version: 'v3.2.1', uploadedAt: '2024-01-15' },
-  { id: 'BLD-002', name: 'CRM-Pro-v2.8.0.apk', type: 'apk', size: '32.8 MB', status: 'ready', locked: false, version: 'v2.8.0', uploadedAt: '2024-01-14' },
-  { id: 'BLD-003', name: 'erp-web-build-v3.2.1.zip', type: 'web', size: '128 MB', status: 'ready', locked: true, version: 'v3.2.1', uploadedAt: '2024-01-15' },
-  { id: 'BLD-004', name: 'crm-web-build-v2.8.0.zip', type: 'web', size: '98 MB', status: 'processing', locked: false, version: 'v2.8.0', uploadedAt: '2024-01-14' },
-  { id: 'BLD-005', name: 'brand-assets-v1.0.zip', type: 'assets', size: '256 MB', status: 'ready', locked: false, version: 'v1.0', uploadedAt: '2024-01-10' },
-  { id: 'BLD-006', name: 'icons-pack-v2.0.zip', type: 'assets', size: '45 MB', status: 'ready', locked: false, version: 'v2.0', uploadedAt: '2024-01-12' },
-];
-
-const mockVersionHistory = [
-  { id: 'VER-001', version: 'v3.2.1', date: '2024-01-15', changes: 'Bug fixes and performance improvements', author: 'Dev Team' },
-  { id: 'VER-002', version: 'v3.2.0', date: '2024-01-10', changes: 'New dashboard features', author: 'Dev Team' },
-  { id: 'VER-003', version: 'v3.1.0', date: '2024-01-05', changes: 'API enhancements', author: 'Dev Team' },
-  { id: 'VER-004', version: 'v3.0.0', date: '2024-01-01', changes: 'Major release with new UI', author: 'Dev Team' },
-];
+interface PMBuild {
+  id: string;
+  reference: string;
+  name: string;
+  type: string;
+  size: string | null;
+  status: string;
+  locked: boolean;
+  version: string;
+  file_url: string | null;
+  uploadedAt: string;
+}
 
 const PMFileBuild: React.FC<PMFileBuildProps> = ({ buildType }) => {
-  const [builds, setBuilds] = useState(mockBuilds);
+  const { data: buildData, refetch: refetchBuilds } = usePMData(fetchBuilds, []);
+  const { data: versionData } = usePMData(fetchBuildVersions, []);
+  const builds: PMBuild[] = ((buildData ?? []) as any[]).map(b => ({
+    ...b,
+    uploadedAt: new Date(b.uploaded_at).toLocaleDateString(),
+  }));
+  const versionHistory = ((versionData ?? []) as any[]).map(v => ({
+    id: v.id,
+    version: v.version,
+    date: new Date(v.released_on).toLocaleDateString(),
+    changes: v.changes,
+    author: v.author,
+  }));
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingType, setPendingType] = useState<string>('apk');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -60,36 +75,62 @@ const PMFileBuild: React.FC<PMFileBuildProps> = ({ buildType }) => {
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = (type: string) => {
+    setPendingType(type);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
     setUploading(true);
-    setUploadProgress(0);
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploading(false);
-          toast.success('Build uploaded successfully');
-          return 100;
+    setUploadProgress(30);
+    try {
+      await uploadBuildFile(file, pendingType, 'v1.0.0');
+      setUploadProgress(100);
+      await refetchBuilds();
+      toast.success('Build uploaded successfully', { description: file.name });
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleAction = async (action: string, build: PMBuild) => {
+    try {
+      if (action === 'Download' || action === 'View') {
+        if (!build.file_url) {
+          toast.error('No file attached to this build');
+          return;
         }
-        return prev + 10;
-      });
-    }, 200);
+        const url = await getBuildDownloadUrl(build.file_url);
+        window.open(url, '_blank', 'noopener');
+        return;
+      }
+      if (action === 'Delete') {
+        if (build.locked) {
+          toast.error('Unlock the file before deleting');
+          return;
+        }
+        await deleteBuild(build.id);
+        await refetchBuilds();
+        toast.success('Build deleted', { description: build.name });
+      }
+    } catch {
+      toast.error(`${action} failed`);
+    }
   };
 
-  const handleAction = (action: string, fileName: string) => {
-    toast.success(`${action} action triggered`, {
-      description: `File: ${fileName}`
-    });
-  };
-
-  const toggleLock = (buildId: string) => {
-    setBuilds(prev => prev.map(b => 
-      b.id === buildId ? { ...b, locked: !b.locked } : b
-    ));
-    const build = builds.find(b => b.id === buildId);
-    toast.success(`File ${build?.locked ? 'unlocked' : 'locked'}`, {
-      description: build?.name
-    });
+  const toggleLock = async (build: PMBuild) => {
+    try {
+      await updateBuild(build.id, { locked: !build.locked });
+      await refetchBuilds();
+      toast.success(`File ${build.locked ? 'unlocked' : 'locked'}`, { description: build.name });
+    } catch {
+      toast.error('Failed to update file lock');
+    }
   };
 
   if (buildType === 'version-history') {
@@ -115,7 +156,7 @@ const PMFileBuild: React.FC<PMFileBuildProps> = ({ buildType }) => {
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-16rem)]">
               <div className="divide-y divide-border/50">
-                {mockVersionHistory.map((version, index) => (
+                {versionHistory.map((version, index) => (
                   <motion.div
                     key={version.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -173,13 +214,19 @@ const PMFileBuild: React.FC<PMFileBuildProps> = ({ buildType }) => {
                 </div>
                 <h3 className="font-semibold mb-1">{item.type}</h3>
                 <p className="text-xs text-muted-foreground mb-4">{item.desc}</p>
-                <Button onClick={handleUpload} disabled={uploading} className="w-full gap-2">
+                <Button
+                  onClick={() => handleUpload(item.type === 'APK' ? 'apk' : item.type === 'Web Build' ? 'web' : 'assets')}
+                  disabled={uploading}
+                  className="w-full gap-2"
+                >
                   <Upload className="w-4 h-4" /> Upload
                 </Button>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelected} />
 
         {uploading && (
           <Card className="bg-card/50 border-primary/30">
@@ -263,17 +310,17 @@ const PMFileBuild: React.FC<PMFileBuildProps> = ({ buildType }) => {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 mt-3">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('View', build.name)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('View', build)}>
                       <Eye className="w-3.5 h-3.5" /> View
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('Download', build.name)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('Download', build)}>
                       <Download className="w-3.5 h-3.5" /> Download
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => toggleLock(build.id)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => toggleLock(build)}>
                       {build.locked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                       {build.locked ? 'Unlock' : 'Lock'}
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-red-400 hover:text-red-300" onClick={() => handleAction('Delete', build.name)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-red-400 hover:text-red-300" onClick={() => handleAction('Delete', build)}>
                       <Trash2 className="w-3.5 h-3.5" /> Delete
                     </Button>
                   </div>

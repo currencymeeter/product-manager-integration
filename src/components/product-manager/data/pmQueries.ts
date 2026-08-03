@@ -244,11 +244,36 @@ export async function deleteBuild(id: string) {
 }
 
 export async function fetchBuildVersions() {
+  const res0 = null;
   const res = await supabase
     .from('pm_build_versions')
     .select('id, reference, version, released_on, changes, author')
     .order('released_on', { ascending: false });
+  void res0;
   return rows<any>(res);
+}
+
+export async function uploadBuildFile(file: File, type: string, version: string) {
+  const path = `builds/${type}/${Date.now()}-${file.name}`;
+  const { error: uploadError } = await supabase.storage.from('product-files').upload(path, file);
+  if (uploadError) throw uploadError;
+  await insertBuild({
+    reference: `BLD-${Date.now().toString(36).toUpperCase()}`,
+    name: file.name,
+    type,
+    size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+    status: 'ready',
+    locked: false,
+    version,
+    file_url: path,
+    uploaded_at: new Date().toISOString(),
+  });
+}
+
+export async function getBuildDownloadUrl(path: string) {
+  const { data, error } = await supabase.storage.from('product-files').createSignedUrl(path, 60);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 // ---------- Modules ----------

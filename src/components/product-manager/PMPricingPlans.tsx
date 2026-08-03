@@ -36,16 +36,9 @@ interface PricingPlan {
   features: string[];
 }
 
-const mockPlans: PricingPlan[] = [
-  { id: '1', name: 'Basic Plan', product_name: 'CRM Suite', model: 'subscription', price: 29, currency: 'USD', billing_cycle: 'monthly', is_active: true, features: ['5 Users', 'Basic Support'] },
-  { id: '2', name: 'Pro Plan', product_name: 'CRM Suite', model: 'subscription', price: 99, currency: 'USD', billing_cycle: 'monthly', is_active: true, features: ['25 Users', 'Priority Support', 'API Access'] },
-  { id: '3', name: 'Enterprise', product_name: 'CRM Suite', model: 'subscription', price: 299, currency: 'USD', billing_cycle: 'monthly', is_active: true, features: ['Unlimited Users', 'Dedicated Support', 'Custom Integrations'] },
-  { id: '4', name: 'Lifetime License', product_name: 'HR Pro', model: 'one_time', price: 499, currency: 'USD', is_active: true, features: ['Lifetime Updates', 'Priority Support'] },
-  { id: '5', name: 'India Pricing', product_name: 'CRM Suite', model: 'country_based', price: 999, currency: 'INR', billing_cycle: 'monthly', country: 'IN', is_active: true, features: ['All Pro Features'] },
-];
-
 const PMPricingPlans: React.FC = () => {
-  const [plans, setPlans] = useState<PricingPlan[]>(mockPlans);
+  const { data, refetch } = usePMData(fetchPricingPlans, []);
+  const plans = (data ?? []) as PricingPlan[];
   const [activeTab, setActiveTab] = useState('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState({
@@ -56,43 +49,58 @@ const PMPricingPlans: React.FC = () => {
     billing_cycle: 'monthly',
   });
 
-  const handleCreatePlan = () => {
+  const handleCreatePlan = async () => {
     if (!formData.name || !formData.price) {
       toast.error('Name and price are required');
       return;
     }
-
-    const newPlan: PricingPlan = {
-      id: Date.now().toString(),
-      name: formData.name,
-      product_name: 'New Product',
-      model: formData.model as any,
-      price: formData.price,
-      currency: formData.currency,
-      billing_cycle: formData.billing_cycle,
-      is_active: true,
-      features: [],
-    };
-
-    setPlans([...plans, newPlan]);
-    setShowCreateDialog(false);
-    setFormData({ name: '', model: 'one_time', price: 0, currency: 'USD', billing_cycle: 'monthly' });
-    toast.success('Pricing plan created');
+    try {
+      await createPricingPlan({
+        name: formData.name,
+        model: formData.model,
+        price: formData.price,
+        currency: formData.currency,
+        billing_cycle: formData.model === 'subscription' ? formData.billing_cycle : null,
+        features: [],
+        is_active: true,
+      });
+      await refetch();
+      setShowCreateDialog(false);
+      setFormData({ name: '', model: 'one_time', price: 0, currency: 'USD', billing_cycle: 'monthly' });
+      toast.success('Pricing plan created');
+    } catch {
+      toast.error('Failed to create pricing plan');
+    }
   };
 
-  const handleClonePlan = (plan: PricingPlan) => {
-    const clonedPlan: PricingPlan = {
-      ...plan,
-      id: Date.now().toString(),
-      name: `${plan.name} (Clone)`,
-    };
-    setPlans([...plans, clonedPlan]);
-    toast.success('Plan cloned');
+  const handleClonePlan = async (plan: PricingPlan) => {
+    try {
+      await createPricingPlan({
+        name: `${plan.name} (Clone)`,
+        model: plan.model,
+        price: plan.price,
+        currency: plan.currency,
+        billing_cycle: plan.billing_cycle ?? null,
+        tier_level: plan.tier_level ?? null,
+        country: plan.country ?? null,
+        features: plan.features,
+        is_active: plan.is_active,
+      });
+      await refetch();
+      toast.success('Plan cloned');
+    } catch {
+      toast.error('Failed to clone plan');
+    }
   };
 
-  const handleArchivePlan = (planId: string) => {
-    setPlans(plans.map(p => p.id === planId ? { ...p, is_active: false } : p));
-    toast.success('Plan archived');
+  const handleArchivePlan = async (planId: string) => {
+    try {
+      await updatePricingPlan(planId, { is_active: false });
+      await refetch();
+      toast.success('Plan archived');
+    } catch {
+      toast.error('Failed to archive plan');
+    }
   };
 
   const filteredPlans = plans.filter(p => {

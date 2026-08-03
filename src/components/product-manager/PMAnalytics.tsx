@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePMData, fetchAnalytics } from './data/pmQueries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,8 +31,8 @@ interface AnalyticsData {
 const PMAnalytics: React.FC = () => {
   const { data } = usePMData(fetchAnalytics, []);
   const productPerformance: AnalyticsData[] = data?.performance ?? [];
-  const demoFunnel = data?.demoFunnel ?? [];
-  const countryData = data?.countryData ?? [];
+  const demoFunnel: { stage: string; count: number; percentage: number }[] = data?.demoFunnel ?? [];
+  const countryData: { country: string; sales: number; percentage: number }[] = data?.countryData ?? [];
 
   return (
     <div className="p-6 space-y-6">

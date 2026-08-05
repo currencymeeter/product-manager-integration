@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { downloadCsv, fetchDeploymentSuccessReport, fetchExportRows, fetchFailureReport, fetchUsageReport, usePMData } from '../data/pmQueries';
 import {
   BarChart3, Download, CheckCircle2, AlertCircle, TrendingUp,
   TrendingDown, Users, Activity, FileText, Calendar
@@ -16,6 +17,9 @@ interface PMReportsProps {
 }
 
 const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
+  const usage = usePMData(fetchUsageReport);
+  const deployments = usePMData(fetchDeploymentSuccessReport);
+  const failures = usePMData(fetchFailureReport);
   const getTitle = () => {
     switch (reportType) {
       case 'software-usage': return 'Software Usage Report';
@@ -26,20 +30,13 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
     }
   };
 
-  const handleExport = (format: string) => {
-    toast.success(`Exporting ${format.toUpperCase()}`, {
-      description: 'Report will be downloaded shortly'
-    });
+  const handleExport = async (name: string) => {
+    try { const data = await fetchExportRows(name); if (!downloadCsv(`${name.toLowerCase().replaceAll(' ', '-')}.csv`, data)) toast.info('No records to export'); }
+    catch { toast.error('Failed to export report'); }
   };
 
   if (reportType === 'software-usage') {
-    const usageData = [
-      { product: 'ERP Suite', users: 1250, sessions: 45000, avgTime: '32 min', trend: 12 },
-      { product: 'CRM Pro', users: 890, sessions: 28000, avgTime: '25 min', trend: 8 },
-      { product: 'HR System', users: 670, sessions: 19000, avgTime: '18 min', trend: -3 },
-      { product: 'Inventory', users: 340, sessions: 8500, avgTime: '15 min', trend: 5 },
-      { product: 'E-Commerce', users: 1520, sessions: 62000, avgTime: '45 min', trend: 22 },
-    ];
+    const usageData = usage.data || [];
 
     return (
       <div className="p-6 space-y-6">
@@ -58,11 +55,8 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
+            <Button variant="outline" size="sm" onClick={() => handleExport('Usage Analytics')}>
               <Download className="w-4 h-4 mr-2" /> CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
-              <Download className="w-4 h-4 mr-2" /> PDF
             </Button>
           </div>
         </motion.div>
@@ -98,8 +92,8 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
                       </div>
                       <div className="text-center p-3 bg-secondary/30 rounded-lg">
                         <Calendar className="w-5 h-5 mx-auto mb-1 text-amber-400" />
-                        <p className="text-lg font-bold">{item.avgTime}</p>
-                        <p className="text-xs text-muted-foreground">Avg. Time</p>
+                        <p className="text-lg font-bold">{item.orders}</p>
+                        <p className="text-xs text-muted-foreground">Orders</p>
                       </div>
                     </div>
                   </CardContent>
@@ -113,12 +107,7 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
   }
 
   if (reportType === 'deployment-success') {
-    const deploymentData = [
-      { month: 'Jan 2024', total: 45, success: 43, failed: 2, rate: 95.6 },
-      { month: 'Dec 2023', total: 38, success: 35, failed: 3, rate: 92.1 },
-      { month: 'Nov 2023', total: 42, success: 40, failed: 2, rate: 95.2 },
-      { month: 'Oct 2023', total: 35, success: 33, failed: 2, rate: 94.3 },
-    ];
+    const deploymentData = deployments.data || [];
 
     return (
       <div className="p-6 space-y-6">
@@ -181,11 +170,7 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
   }
 
   if (reportType === 'failure-reports') {
-    const failureData = [
-      { id: 'FAIL-001', product: 'Inventory Manager', version: 'v1.0.0', date: '2024-01-14', reason: 'Database migration failed', resolved: true },
-      { id: 'FAIL-002', product: 'HR System', version: 'v4.1.1', date: '2024-01-10', reason: 'Build timeout exceeded', resolved: true },
-      { id: 'FAIL-003', product: 'CRM Pro', version: 'v2.7.9', date: '2024-01-05', reason: 'Memory limit reached', resolved: true },
-    ];
+    const failureData = failures.data || [];
 
     return (
       <div className="p-6 space-y-6">
@@ -271,7 +256,7 @@ const PMReports: React.FC<PMReportsProps> = ({ reportType }) => {
                 <report.icon className="w-8 h-8 mx-auto mb-3 text-violet-400" />
                 <h3 className="font-medium mb-1">{report.name}</h3>
                 <Badge variant="secondary" className="mb-3">{report.format}</Badge>
-                <Button className="w-full gap-2" size="sm" onClick={() => handleExport(report.format)}>
+                <Button className="w-full gap-2" size="sm" onClick={() => handleExport(report.name)}>
                   <Download className="w-4 h-4" /> Export
                 </Button>
               </CardContent>

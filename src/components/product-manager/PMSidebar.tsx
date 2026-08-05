@@ -49,8 +49,8 @@ import {
   ClipboardList,
   Bell,
   User,
-  LogOut,
   Box,
+  Code,
   ToggleLeft,
   UserCheck,
 } from 'lucide-react';

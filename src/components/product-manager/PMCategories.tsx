@@ -90,13 +90,20 @@ const PMCategories: React.FC<PMCategoriesProps> = ({ level }) => {
         if (error) throw error;
         setCategories((data || []).map(c => ({ ...c, level: 'sub' as const, parent_id: c.category_id })));
       }
-      // For micro and nano, we'll use mock data for now
-      else {
-        setCategories([
-          { id: '1', name: 'Source Type', level, is_active: true, display_order: 1, product_count: 12 },
-          { id: '2', name: 'Budget Range', level, is_active: true, display_order: 2, product_count: 8 },
-          { id: '3', name: 'Urgency Level', level, is_active: true, display_order: 3, product_count: 5 },
-        ]);
+      else if (level === 'micro') {
+        const { data: parents, error: parentError } = await supabase.from('business_subcategories').select('id, name').eq('is_active', true);
+        if (parentError) throw parentError;
+        setParentCategories((parents || []).map(p => ({ ...p, level: 'sub' as const, is_active: true, display_order: 0 })));
+        const { data, error } = await supabase.from('product_micro_categories').select('id, name, subcategory_id, is_active, display_order').order('display_order');
+        if (error) throw error;
+        setCategories((data || []).map(c => ({ ...c, level: 'micro' as const, parent_id: c.subcategory_id })));
+      } else {
+        const { data: parents, error: parentError } = await supabase.from('product_micro_categories').select('id, name').eq('is_active', true);
+        if (parentError) throw parentError;
+        setParentCategories((parents || []).map(p => ({ ...p, level: 'micro' as const, is_active: true, display_order: 0 })));
+        const { data, error } = await supabase.from('product_nano_categories').select('id, name, micro_category_id, is_active, display_order').order('display_order');
+        if (error) throw error;
+        setCategories((data || []).map(c => ({ ...c, level: 'nano' as const, parent_id: c.micro_category_id })));
       }
     } catch (error: any) {
       toast.error('Failed to fetch categories');
@@ -130,6 +137,14 @@ const PMCategories: React.FC<PMCategoriesProps> = ({ level }) => {
           .from('business_subcategories')
           .insert({ name: formData.name, category_id: formData.parent_id, is_active: true });
         if (error) throw error;
+      } else if (level === 'micro') {
+        if (!formData.parent_id) { toast.error('Parent category is required'); return; }
+        const { error } = await supabase.from('product_micro_categories').insert({ name: formData.name, subcategory_id: formData.parent_id, is_active: true });
+        if (error) throw error;
+      } else {
+        if (!formData.parent_id) { toast.error('Parent category is required'); return; }
+        const { error } = await supabase.from('product_nano_categories').insert({ name: formData.name, micro_category_id: formData.parent_id, is_active: true });
+        if (error) throw error;
       }
 
       toast.success('Category created');
@@ -157,6 +172,10 @@ const PMCategories: React.FC<PMCategoriesProps> = ({ level }) => {
           .update({ name: formData.name })
           .eq('id', selectedCategory.id);
         if (error) throw error;
+      } else {
+        const table = level === 'micro' ? 'product_micro_categories' : 'product_nano_categories';
+        const { error } = await supabase.from(table).update({ name: formData.name }).eq('id', selectedCategory.id);
+        if (error) throw error;
       }
 
       toast.success('Category updated');
@@ -183,6 +202,10 @@ const PMCategories: React.FC<PMCategoriesProps> = ({ level }) => {
           .from('business_subcategories')
           .update({ is_active: newStatus })
           .eq('id', category.id);
+        if (error) throw error;
+      } else {
+        const table = level === 'micro' ? 'product_micro_categories' : 'product_nano_categories';
+        const { error } = await supabase.from(table).update({ is_active: newStatus }).eq('id', category.id);
         if (error) throw error;
       }
 

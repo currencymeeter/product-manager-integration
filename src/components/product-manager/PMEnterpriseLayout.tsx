@@ -107,27 +107,29 @@ const PMEnterpriseLayout: React.FC<PMEnterpriseLayoutProps> = ({ viewOnly = fals
 
   const fetchStats = useCallback(async () => {
     try {
-      const [productsRes, demosRes] = await Promise.all([
+      const [productsRes, demosRes, ordersRes, deploymentsRes, alertsRes] = await Promise.all([
         supabase.from('products').select('product_id', { count: 'exact', head: true }),
         supabase.from('demos').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('product_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('pm_deployments').select('id', { count: 'exact', head: true }).in('status', ['pending', 'deploying']),
+        supabase.from('pm_abuse_alerts').select('id', { count: 'exact', head: true }).eq('resolved', false).eq('severity', 'high'),
       ]);
 
       setStats({
-        totalProducts: productsRes.count || 12,
-        activeDemos: demosRes.count || 8,
-        pendingOrders: 5,
-        pendingDeployments: 3,
-        criticalIssues: 2,
+        totalProducts: productsRes.count ?? 0,
+        activeDemos: demosRes.count ?? 0,
+        pendingOrders: ordersRes.count ?? 0,
+        pendingDeployments: deploymentsRes.count ?? 0,
+        criticalIssues: alertsRes.count ?? 0,
       });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
-      // Set mock data on error
       setStats({
-        totalProducts: 12,
-        activeDemos: 8,
-        pendingOrders: 5,
-        pendingDeployments: 3,
-        criticalIssues: 2,
+        totalProducts: 0,
+        activeDemos: 0,
+        pendingOrders: 0,
+        pendingDeployments: 0,
+        criticalIssues: 0,
       });
     }
   }, []);

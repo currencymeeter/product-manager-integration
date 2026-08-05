@@ -49,7 +49,6 @@ import {
   ClipboardList,
   Bell,
   User,
-  LogOut,
   Box,
   Code,
   ToggleLeft,
@@ -225,15 +224,7 @@ const menuItems: MenuItem[] = [
     ]
   },
   
-  // 12. DEV STUDIO (LIVE)
-  {
-    id: 'dev-studio',
-    label: 'Dev Studio',
-    icon: Code,
-    badge: 'LIVE',
-  },
-  
-  // 13. SETTINGS (LIMITED)
+  // 12. SETTINGS (LIMITED)
   { 
     id: 'settings', 
     label: 'Settings', 
@@ -242,7 +233,6 @@ const menuItems: MenuItem[] = [
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'security-settings', label: 'Security', icon: Shield },
       { id: 'profile', label: 'Profile', icon: User },
-      { id: 'logout', label: 'Logout', icon: LogOut },
     ]
   },
 ];

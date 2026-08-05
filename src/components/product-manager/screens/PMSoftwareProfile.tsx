@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,34 +8,33 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { fetchSoftwareProfile, updateSoftwareProfile } from '../data/pmQueries';
 import {
   FileText, Save, Edit3, Eye, History, Lock, Unlock, Package,
   GitBranch, Cpu, Users, Globe2, Calendar, CheckCircle2
 } from 'lucide-react';
 
-const mockSoftware = {
-  id: 'SW-001',
-  name: 'Enterprise ERP Suite',
-  version: 'v3.2.1',
-  status: 'active',
-  description: 'Complete enterprise resource planning solution with modules for finance, HR, inventory, and more.',
-  modules: ['Finance', 'HR', 'Inventory', 'CRM', 'Analytics', 'Reports'],
-  ownership: 'Software Vala',
-  createdAt: '2023-01-15',
-  updatedAt: '2024-01-15',
-  deployedTo: 45,
-  activeUsers: 1250,
-};
+const emptySoftware = { id: '', name: '', version: '', status: 'active', description: '', modules: [] as string[], ownership: '', createdAt: '', updatedAt: '', deployedTo: 0, activeUsers: 0 };
 
 const PMSoftwareProfile: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
-  const [software, setSoftware] = useState(mockSoftware);
+  const [software, setSoftware] = useState(emptySoftware);
 
-  const handleSave = () => {
-    setIsEditing(false);
-    toast.success('Software profile saved', {
-      description: software.name
-    });
+  useEffect(() => {
+    fetchSoftwareProfile().then((profile) => {
+      if (!profile) return;
+      setSoftware({ ...profile, createdAt: new Date(profile.created_at).toLocaleDateString(), updatedAt: new Date(profile.updated_at).toLocaleDateString(), deployedTo: profile.deployed_to, activeUsers: profile.active_users });
+    }).catch(() => toast.error('Failed to load software profile'));
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await updateSoftwareProfile(software.id, { name: software.name, version: software.version, status: software.status, description: software.description });
+      setIsEditing(false);
+      toast.success('Software profile saved', { description: software.name });
+    } catch {
+      toast.error('Failed to save software profile');
+    }
   };
 
   const handleAction = (action: string) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { fetchAbuseAlerts, fetchApiKeys, fetchLicenses, resolveAbuseAlert, updateApiKey, updateLicense, usePMData } from '../data/pmQueries';
 import {
   Lock, Unlock, Globe2, Key, Timer, ShieldAlert, Shield,
   Eye, Edit3, Copy, AlertTriangle, CheckCircle2, XCircle, Calendar
@@ -16,29 +17,13 @@ interface PMSecurityLicenseProps {
   securityType: string;
 }
 
-const mockLicenses = [
-  { id: 'LIC-001', product: 'ERP Suite', key: 'XXXX-XXXX-XXXX-1234', status: 'active', locked: true, domain: 'client1.erp.com', expiresAt: '2025-01-15' },
-  { id: 'LIC-002', product: 'CRM Pro', key: 'XXXX-XXXX-XXXX-5678', status: 'active', locked: false, domain: 'crm.client2.com', expiresAt: '2024-12-31' },
-  { id: 'LIC-003', product: 'HR System', key: 'XXXX-XXXX-XXXX-9012', status: 'suspended', locked: true, domain: 'hr.client3.com', expiresAt: '2024-06-30' },
-  { id: 'LIC-004', product: 'Inventory', key: 'XXXX-XXXX-XXXX-3456', status: 'active', locked: false, domain: null, expiresAt: '2024-08-15' },
-];
-
-const mockApiKeys = [
-  { id: 'API-001', name: 'Production API Key', key: 'sk_live_****4567', status: 'active', createdAt: '2024-01-01', lastUsed: '2024-01-15' },
-  { id: 'API-002', name: 'Staging API Key', key: 'sk_test_****8901', status: 'active', createdAt: '2024-01-05', lastUsed: '2024-01-14' },
-  { id: 'API-003', name: 'Development Key', key: 'sk_dev_****2345', status: 'revoked', createdAt: '2023-12-01', lastUsed: '2024-01-10' },
-];
-
-const mockAbuseAlerts = [
-  { id: 'ABU-001', type: 'rate_limit', product: 'ERP Suite', ip: '192.168.1.***', severity: 'high', detected: '2024-01-15 10:30', resolved: false },
-  { id: 'ABU-002', type: 'invalid_license', product: 'CRM Pro', ip: '10.0.0.***', severity: 'medium', detected: '2024-01-14 15:20', resolved: true },
-  { id: 'ABU-003', type: 'suspicious_access', product: 'HR System', ip: '172.16.0.***', severity: 'low', detected: '2024-01-13 09:00', resolved: true },
-];
-
 const PMSecurityLicense: React.FC<PMSecurityLicenseProps> = ({ securityType }) => {
-  const [licenses, setLicenses] = useState(mockLicenses);
-  const [apiKeys, setApiKeys] = useState(mockApiKeys);
-  const [abuseAlerts, setAbuseAlerts] = useState(mockAbuseAlerts);
+  const licenseData = usePMData(fetchLicenses);
+  const apiKeyData = usePMData(fetchApiKeys);
+  const abuseData = usePMData(fetchAbuseAlerts);
+  const licenses = (licenseData.data || []).map((l: any) => ({ ...l, product: l.product_name, key: l.license_key, domain: l.domain_bound, expiresAt: l.expires_at ? new Date(l.expires_at).toLocaleDateString() : 'Never' }));
+  const apiKeys = (apiKeyData.data || []).map((k: any) => ({ ...k, key: k.key_preview, createdAt: new Date(k.created_at).toLocaleDateString(), lastUsed: k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never' }));
+  const abuseAlerts = (abuseData.data || []).map((a: any) => ({ ...a, product: a.product_name, ip: a.ip_address, detected: new Date(a.detected_at).toLocaleString() }));
 
   const getTitle = () => {
     switch (securityType) {
@@ -62,27 +47,24 @@ const PMSecurityLicense: React.FC<PMSecurityLicenseProps> = ({ securityType }) =
     }
   };
 
-  const handleAction = (action: string, item: string) => {
-    toast.success(`${action} action triggered`, {
-      description: item
-    });
+  const handleAction = async (action: string, item: any) => {
+    try {
+      if (action === 'Copy') await navigator.clipboard.writeText(item.key);
+      if (action === 'Revoke') { await updateApiKey(item.id, { status: 'revoked' }); await apiKeyData.refetch(); }
+      toast.success(action === 'Revoke' ? 'API key revoked' : 'API key copied');
+    } catch { toast.error(`Failed to ${action.toLowerCase()} API key`); }
   };
 
-  const toggleLock = (licenseId: string) => {
-    setLicenses(prev => prev.map(l => 
-      l.id === licenseId ? { ...l, locked: !l.locked } : l
-    ));
+  const toggleLock = async (licenseId: string) => {
     const license = licenses.find(l => l.id === licenseId);
-    toast.success(`License ${license?.locked ? 'unlocked' : 'locked'}`, {
-      description: license?.product
-    });
+    if (!license) return;
+    try { await updateLicense(licenseId, { locked: !license.locked }); await licenseData.refetch(); toast.success(`License ${license.locked ? 'unlocked' : 'locked'}`); }
+    catch { toast.error('Failed to update license lock'); }
   };
 
-  const resolveAlert = (alertId: string) => {
-    setAbuseAlerts(prev => prev.map(a => 
-      a.id === alertId ? { ...a, resolved: true } : a
-    ));
-    toast.success('Alert resolved');
+  const resolveAlert = async (alertId: string) => {
+    try { await resolveAbuseAlert(alertId, true); await abuseData.refetch(); toast.success('Alert resolved'); }
+    catch { toast.error('Failed to resolve alert'); }
   };
 
   const Icon = getIcon();
@@ -134,13 +116,10 @@ const PMSecurityLicense: React.FC<PMSecurityLicenseProps> = ({ securityType }) =
                       <span>Last used: {key.lastUsed}</span>
                     </div>
                     <div className="flex items-center gap-1 mt-3">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('Copy', key.name)}>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('Copy', key)}>
                         <Copy className="w-3.5 h-3.5" /> Copy
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleAction('View', key.name)}>
-                        <Eye className="w-3.5 h-3.5" /> View
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-red-400" onClick={() => handleAction('Revoke', key.name)}>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-red-400" onClick={() => handleAction('Revoke', key)}>
                         <XCircle className="w-3.5 h-3.5" /> Revoke
                       </Button>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { fetchExportRows, fetchSettings, saveSettings, downloadCsv } from './data/pmQueries';
 import {
   Settings,
   Save,
@@ -47,20 +48,37 @@ const PMSettings: React.FC = () => {
   });
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    fetchSettings().then((saved) => {
+      if (saved.product_manager && typeof saved.product_manager === 'object') {
+        setSettings((current) => ({ ...current, ...(saved.product_manager as Partial<typeof current>) }));
+      }
+    }).catch(() => toast.error('Failed to load settings'));
+  }, []);
+
   const handleSave = async () => {
     setSaving(true);
-    // Simulate save
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast.success('Settings saved successfully');
-    setSaving(false);
+    try {
+      await saveSettings('product_manager', settings);
+      toast.success('Settings saved successfully');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleExportData = () => {
-    toast.success('Exporting product data...');
+  const handleExportData = async () => {
+    try {
+      const rows = await fetchExportRows('Full Report');
+      if (!downloadCsv('product-manager-export.csv', rows)) toast.info('No records to export');
+    } catch {
+      toast.error('Failed to export product data');
+    }
   };
 
   const handleImportData = () => {
-    toast.info('Import feature coming soon');
+    toast.info('Use Bulk Upload to validate and import product records');
   };
 
   return (

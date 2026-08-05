@@ -37,6 +37,8 @@ interface Demo {
   status: string;
   access_type?: string;
   created_at: string;
+  total_views: number;
+  conversions: number;
   product_mappings?: { product_id: string; products?: { product_name: string } }[];
 }
 
@@ -57,7 +59,7 @@ const PMDemoManagement: React.FC = () => {
     try {
       let query = supabase
         .from('demos')
-        .select('*')
+        .select('id, title, url, status, access_type, created_at, total_views, conversions')
         .order('created_at', { ascending: false });
 
       if (filterStatus !== 'all' && (filterStatus === 'active' || filterStatus === 'inactive' || filterStatus === 'down' || filterStatus === 'maintenance')) {
@@ -91,6 +93,7 @@ const PMDemoManagement: React.FC = () => {
         url: formData.url,
         status: 'active' as const,
         category: 'product_demo',
+        access_type: formData.access_type,
       }]);
 
       if (error) throw error;
@@ -139,8 +142,10 @@ const PMDemoManagement: React.FC = () => {
   const stats = {
     total: demos.length,
     active: demos.filter(d => d.status === 'active').length,
-    paused: demos.filter(d => d.status === 'paused').length,
-    avgConversion: 12.5,
+    paused: demos.filter(d => d.status === 'inactive').length,
+    avgConversion: demos.reduce((sum, demo) => sum + demo.total_views, 0)
+      ? demos.reduce((sum, demo) => sum + demo.conversions, 0) / demos.reduce((sum, demo) => sum + demo.total_views, 0) * 100
+      : 0,
   };
 
   return (
@@ -201,7 +206,7 @@ const PMDemoManagement: React.FC = () => {
               <TrendingUp className="w-5 h-5 text-cyan-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{stats.avgConversion}%</p>
+              <p className="text-2xl font-bold">{stats.avgConversion.toFixed(1)}%</p>
               <p className="text-xs text-muted-foreground">Avg Conversion</p>
             </div>
           </CardContent>
@@ -304,13 +309,13 @@ const PMDemoManagement: React.FC = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{Math.floor(Math.random() * 100)} users</span>
+                         <span className="text-sm">{demo.total_views.toLocaleString()} views</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Progress value={Math.random() * 25} className="w-16 h-2" />
-                        <span className="text-sm">{(Math.random() * 25).toFixed(1)}%</span>
+                         <Progress value={demo.total_views ? demo.conversions / demo.total_views * 100 : 0} className="w-16 h-2" />
+                         <span className="text-sm">{(demo.total_views ? demo.conversions / demo.total_views * 100 : 0).toFixed(1)}%</span>
                       </div>
                     </TableCell>
                     <TableCell>

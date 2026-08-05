@@ -41,6 +41,13 @@ interface KPICard {
   filterValue?: string;
 }
 
+interface RecentProduct {
+  product_id: string;
+  product_name: string;
+  status: string;
+  order_count: number;
+}
+
 const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) => {
   const [stats, setStats] = useState({
     total: 0,
@@ -49,9 +56,10 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
     draft: 0,
     totalDemos: 0,
     activeDemos: 0,
-    conversionRate: 12.5,
-    weeklyTrend: 8.3,
+    conversionRate: 0,
+    weeklyTrend: 0,
   });
+  const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -60,11 +68,14 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
     try {
       const { data: products } = await supabase
         .from('products')
-        .select('status');
+        .select('product_id, product_name, status, created_at')
+        .order('created_at', { ascending: false });
 
       const { data: demos } = await supabase
         .from('demos')
-        .select('status');
+        .select('status, total_views, conversions');
+
+      const { data: orders } = await supabase.from('product_orders').select('product_id, created_at');
 
       if (products) {
         setStats({
@@ -74,9 +85,17 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
           draft: products.filter(p => p.status === 'draft').length,
           totalDemos: demos?.length || 0,
           activeDemos: demos?.filter(d => d.status === 'active').length || 0,
-          conversionRate: 12.5,
-          weeklyTrend: 8.3,
+          conversionRate: demos?.reduce((sum, d) => sum + d.total_views, 0)
+            ? Math.round((demos.reduce((sum, d) => sum + d.conversions, 0) / demos.reduce((sum, d) => sum + d.total_views, 0)) * 1000) / 10
+            : 0,
+          weeklyTrend: orders?.length
+            ? Math.round((orders.filter((o) => new Date(o.created_at) >= new Date(Date.now() - 7 * 86400000)).length / orders.length) * 1000) / 10
+            : 0,
         });
+        setRecentProducts(products.slice(0, 4).map((product) => ({
+          ...product,
+          order_count: orders?.filter((order) => order.product_id === product.product_id).length ?? 0,
+        })));
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
@@ -91,13 +110,13 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
   }, []);
 
   const kpiCards: KPICard[] = [
-    { id: 'total', label: 'Total Products', value: stats.total, trend: 12, icon: Package, color: 'text-blue-500', bgColor: 'bg-blue-500/10', filterSection: 'all-products' },
-    { id: 'active', label: 'Active Products', value: stats.active, trend: 5, icon: CheckCircle, color: 'text-green-500', bgColor: 'bg-green-500/10', filterSection: 'all-products', filterValue: 'active' },
-    { id: 'parked', label: 'Parked Products', value: stats.parked, trend: -3, icon: PauseCircle, color: 'text-amber-500', bgColor: 'bg-amber-500/10', filterSection: 'all-products', filterValue: 'parked' },
-    { id: 'draft', label: 'Draft Products', value: stats.draft, trend: 2, icon: FileEdit, color: 'text-slate-400', bgColor: 'bg-slate-500/10', filterSection: 'all-products', filterValue: 'draft' },
-    { id: 'demos', label: 'Total Demos', value: stats.totalDemos, trend: 15, icon: MonitorPlay, color: 'text-purple-500', bgColor: 'bg-purple-500/10', filterSection: 'demo-management' },
-    { id: 'active-demos', label: 'Active Demos', value: stats.activeDemos, trend: 8, icon: MonitorPlay, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10', filterSection: 'demo-management' },
-    { id: 'conversion', label: 'Conversion %', value: stats.conversionRate, trend: 2.1, icon: TrendingUp, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', filterSection: 'analytics' },
+    { id: 'total', label: 'Total Products', value: stats.total, trend: 0, icon: Package, color: 'text-blue-500', bgColor: 'bg-blue-500/10', filterSection: 'all-products' },
+    { id: 'active', label: 'Active Products', value: stats.active, trend: 0, icon: CheckCircle, color: 'text-green-500', bgColor: 'bg-green-500/10', filterSection: 'all-products', filterValue: 'active' },
+    { id: 'parked', label: 'Parked Products', value: stats.parked, trend: 0, icon: PauseCircle, color: 'text-amber-500', bgColor: 'bg-amber-500/10', filterSection: 'all-products', filterValue: 'parked' },
+    { id: 'draft', label: 'Draft Products', value: stats.draft, trend: 0, icon: FileEdit, color: 'text-slate-400', bgColor: 'bg-slate-500/10', filterSection: 'all-products', filterValue: 'draft' },
+    { id: 'demos', label: 'Total Demos', value: stats.totalDemos, trend: 0, icon: MonitorPlay, color: 'text-purple-500', bgColor: 'bg-purple-500/10', filterSection: 'demo-management' },
+    { id: 'active-demos', label: 'Active Demos', value: stats.activeDemos, trend: 0, icon: MonitorPlay, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10', filterSection: 'demo-management' },
+    { id: 'conversion', label: 'Conversion %', value: stats.conversionRate, trend: 0, icon: TrendingUp, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', filterSection: 'analytics' },
     { id: 'trend', label: 'Weekly Trend', value: stats.weeklyTrend, trend: stats.weeklyTrend, icon: BarChart3, color: 'text-pink-500', bgColor: 'bg-pink-500/10', filterSection: 'analytics' },
   ];
 
@@ -186,20 +205,15 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
                 </div>
               ) : (
                 <>
-                  {[
-                    { name: 'Enterprise CRM Suite', status: 'active', demos: 3, sales: 245 },
-                    { name: 'HR Management Pro', status: 'active', demos: 2, sales: 189 },
-                    { name: 'Inventory Tracker', status: 'parked', demos: 1, sales: 67 },
-                    { name: 'POS System Ultra', status: 'draft', demos: 0, sales: 0 },
-                  ].map((product, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                  {recentProducts.map((product) => (
+                    <div key={product.product_id} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                           <Package className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">{product.demos} demos • {product.sales} sales</p>
+                          <p className="font-medium text-sm">{product.product_name}</p>
+                          <p className="text-xs text-muted-foreground">{product.order_count} orders</p>
                         </div>
                       </div>
                       <Badge variant={product.status === 'active' ? 'default' : product.status === 'parked' ? 'secondary' : 'outline'}>

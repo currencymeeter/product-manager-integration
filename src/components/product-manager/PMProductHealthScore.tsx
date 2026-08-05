@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchProductHealth } from './data/pmQueries';
 import {
   Activity,
   TrendingUp,
@@ -49,59 +49,7 @@ const PMProductHealthScore: React.FC = () => {
     setLoading(true);
     
     try {
-      const { data: productsData } = await supabase
-        .from('products')
-        .select('product_id, product_name, status, lifetime_price')
-        .eq('status', 'active')
-        .limit(20);
-
-      if (!productsData) return;
-
-      // Simulate health analysis
-      const healthData: ProductHealth[] = productsData.map(p => {
-        const views = Math.floor(Math.random() * 1000) + 100;
-        const demoRequests = Math.floor(Math.random() * 50) + 5;
-        const conversions = Math.floor(Math.random() * 20) + 1;
-        const conversionRate = (conversions / demoRequests) * 100;
-        const revenue = conversions * (p.lifetime_price || 99);
-        
-        const issues: string[] = [];
-        const recommendations: string[] = [];
-        
-        if (views < 200) {
-          issues.push('Low visibility');
-          recommendations.push('Improve SEO and product listing');
-        }
-        if (conversionRate < 10) {
-          issues.push('Low conversion rate');
-          recommendations.push('Review pricing and demo experience');
-        }
-        if (demoRequests < 10) {
-          issues.push('Few demo requests');
-          recommendations.push('Add more compelling demo CTA');
-        }
-
-        let score = 100;
-        score -= issues.length * 15;
-        score = Math.max(score, 0);
-
-        return {
-          product_id: p.product_id,
-          product_name: p.product_name,
-          health_score: score,
-          metrics: {
-            views,
-            demo_requests: demoRequests,
-            conversion_rate: Math.round(conversionRate * 10) / 10,
-            revenue,
-            inventory_status: score > 70 ? 'healthy' : score > 40 ? 'low' : 'critical',
-          },
-          issues,
-          recommendations,
-          trend: score > 70 ? 'up' : score > 40 ? 'stable' : 'down',
-        };
-      });
-
+      const healthData = await fetchProductHealth() as ProductHealth[];
       setProducts(healthData.sort((a, b) => b.health_score - a.health_score));
     } catch (error) {
       console.error('Health analysis failed:', error);
@@ -112,19 +60,12 @@ const PMProductHealthScore: React.FC = () => {
 
   const runAIAnalysis = async () => {
     setAnalyzing(true);
-    // Simulate AI analysis
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setProducts(prev => prev.map(p => ({
-      ...p,
-      recommendations: [
-        ...p.recommendations,
-        'AI: Consider bundling with related products',
-        'AI: Test A/B pricing at $' + Math.round(p.metrics.revenue / 10),
-      ].slice(0, 4),
-    })));
-    
-    setAnalyzing(false);
+    try {
+      const healthData = await fetchProductHealth() as ProductHealth[];
+      setProducts(healthData.sort((a, b) => b.health_score - a.health_score));
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const getScoreColor = (score: number) => {

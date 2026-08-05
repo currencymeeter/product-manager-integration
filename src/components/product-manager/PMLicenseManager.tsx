@@ -22,8 +22,8 @@ import {
   Loader2,
   Download,
 } from 'lucide-react';
-import { format, addDays, addMonths, addYears } from 'date-fns';
-import { fetchLicenses, insertLicenses, updateLicense } from './data/pmQueries';
+import { format, addDays, addYears } from 'date-fns';
+import { fetchLicenses as fetchLicenseRecords, insertLicenses, updateLicense } from './data/pmQueries';
 
 interface License {
   id: string;
@@ -59,7 +59,7 @@ const PMLicenseManager: React.FC = () => {
   const fetchLicenses = async () => {
     setLoading(true);
     try {
-      setLicenses(await fetchLicenses());
+      setLicenses(await fetchLicenseRecords());
     } catch (error) {
       toast.error('Failed to load licenses');
     } finally {

@@ -23,6 +23,7 @@ import {
   Download,
 } from 'lucide-react';
 import { format, addDays, addMonths, addYears } from 'date-fns';
+import { fetchLicenses, insertLicenses, updateLicense } from './data/pmQueries';
 
 interface License {
   id: string;
@@ -57,23 +58,13 @@ const PMLicenseManager: React.FC = () => {
 
   const fetchLicenses = async () => {
     setLoading(true);
-    // Simulating license data from a hypothetical table
-    // In real implementation, this would query a licenses table
-    const mockLicenses: License[] = [
-      {
-        id: '1',
-        license_key: 'PROD-XXXX-YYYY-ZZZZ',
-        product_id: 'p1',
-        product_name: 'Enterprise Suite',
-        domain_bound: 'example.com',
-        expires_at: addMonths(new Date(), 6).toISOString(),
-        status: 'active',
-        created_at: new Date().toISOString(),
-        user_email: 'user@example.com',
-      },
-    ];
-    setLicenses(mockLicenses);
-    setLoading(false);
+    try {
+      setLicenses(await fetchLicenses());
+    } catch (error) {
+      toast.error('Failed to load licenses');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchProducts = async () => {
@@ -107,7 +98,7 @@ const PMLicenseManager: React.FC = () => {
     setGenerating(true);
     try {
       const product = products.find(p => p.product_id === generateForm.product_id);
-      const newLicenses: License[] = [];
+      const newLicenses: Omit<License, 'id' | 'created_at'>[] = [];
 
       let expiresAt: string | null = null;
       switch (generateForm.expiry_type) {
@@ -124,18 +115,17 @@ const PMLicenseManager: React.FC = () => {
 
       for (let i = 0; i < generateForm.quantity; i++) {
         newLicenses.push({
-          id: `gen-${Date.now()}-${i}`,
           license_key: generateLicenseKey(),
           product_id: generateForm.product_id,
           product_name: product?.product_name || 'Unknown',
           domain_bound: generateForm.domain_bind || null,
           expires_at: expiresAt,
           status: 'unused',
-          created_at: new Date().toISOString(),
         });
       }
 
-      setLicenses([...newLicenses, ...licenses]);
+      await insertLicenses(newLicenses);
+      await fetchLicenses();
       toast.success(`Generated ${generateForm.quantity} license(s)`);
       setShowGenerateDialog(false);
       setGenerateForm({ product_id: '', quantity: 1, expiry_type: 'none', domain_bind: '' });
@@ -151,11 +141,14 @@ const PMLicenseManager: React.FC = () => {
     toast.success('License key copied');
   };
 
-  const revokeLicense = (id: string) => {
-    setLicenses(licenses.map(l => 
-      l.id === id ? { ...l, status: 'revoked' } : l
-    ));
-    toast.success('License revoked');
+  const revokeLicense = async (id: string) => {
+    try {
+      await updateLicense(id, { status: 'revoked' });
+      await fetchLicenses();
+      toast.success('License revoked');
+    } catch {
+      toast.error('Failed to revoke license');
+    }
   };
 
   const exportLicenses = () => {

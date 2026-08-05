@@ -361,6 +361,66 @@ export async function fetchSoftwareProfile() {
   return rows<any>(res)[0] ?? null;
 }
 
+export async function fetchSettings() {
+  const res = await supabase.from('pm_settings').select('key, value');
+  return Object.fromEntries(rows<any>(res).map((row) => [row.key, row.value]));
+}
+
+export async function saveSettings(key: string, value: Record<string, unknown>) {
+  const { error } = await supabase
+    .from('pm_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() } as never, { onConflict: 'key' });
+  if (error) throw error;
+}
+
+export async function fetchProductHealth() {
+  const [products, demos, orders, inventory, mappings] = await Promise.all([
+    supabase.from('products').select('product_id, product_name, status').eq('status', 'active'),
+    supabase.from('demos').select('id, total_views, conversions'),
+    supabase.from('product_orders').select('product_id, total, payment_status'),
+    supabase.from('product_inventory').select('product_id, available_stock, low_threshold, stock_type'),
+    supabase.from('product_demo_mappings').select('product_id, demo_id'),
+  ]);
+  const demoRows = rows<any>(demos);
+  const orderRows = rows<any>(orders);
+  const inventoryRows = rows<any>(inventory);
+  const mappingRows = rows<any>(mappings);
+  return rows<any>(products).map((product) => {
+    const demoIds = new Set(mappingRows.filter((m) => m.product_id === product.product_id).map((m) => m.demo_id));
+    const productDemos = demoRows.filter((d) => demoIds.has(d.id));
+    const views = productDemos.reduce((sum, d) => sum + d.total_views, 0);
+    const conversions = productDemos.reduce((sum, d) => sum + d.conversions, 0);
+    const paidOrders = orderRows.filter((o) => o.product_id === product.product_id && o.payment_status === 'paid');
+    const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
+    const stock = inventoryRows.find((i) => i.product_id === product.product_id);
+    const conversionRate = views ? (conversions / views) * 100 : 0;
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+    if (views < 500) { issues.push('Low demo visibility'); recommendations.push('Improve product discovery and demo placement'); }
+    if (conversionRate < 8) { issues.push('Low conversion rate'); recommendations.push('Review pricing, positioning, and demo experience'); }
+    if (stock && stock.stock_type !== 'unlimited' && stock.available_stock <= stock.low_threshold) {
+      issues.push('Inventory below threshold'); recommendations.push('Restock licenses before the next sales cycle');
+    }
+    const score = Math.max(0, 100 - issues.length * 18);
+    return {
+      product_id: product.product_id,
+      product_name: product.product_name,
+      health_score: score,
+      metrics: {
+        views,
+        demo_requests: conversions,
+        conversion_rate: Math.round(conversionRate * 10) / 10,
+        revenue,
+        inventory_status: !stock || stock.stock_type === 'unlimited' || stock.available_stock > stock.low_threshold * 2
+          ? 'healthy' : stock.available_stock > stock.low_threshold ? 'low' : 'critical',
+      },
+      issues,
+      recommendations,
+      trend: score >= 75 ? 'up' : score >= 50 ? 'stable' : 'down',
+    };
+  });
+}
+
 export async function updateSoftwareProfile(id: string, patch: Record<string, unknown>) {
   const { error } = await supabase.from('pm_software_profiles').update(patch as never).eq('id', id);
   if (error) throw error;

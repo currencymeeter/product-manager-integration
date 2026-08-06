@@ -60,6 +60,7 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
     weeklyTrend: 0,
   });
   const [recentProducts, setRecentProducts] = useState<RecentProduct[]>([]);
+  const [insights, setInsights] = useState({ singlePlanProducts: 0, lowDemos: 0, lowStock: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -76,6 +77,28 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
         .select('status, total_views, conversions');
 
       const { data: orders } = await supabase.from('product_orders').select('product_id, created_at');
+
+      const { data: plans } = await supabase.from('product_pricing_plans').select('product_id');
+      const { data: inventory } = await supabase
+        .from('product_inventory')
+        .select('available_stock, low_threshold, stock_type');
+
+      const planCounts = new Map<string, number>();
+      plans?.forEach((plan) => {
+        if (!plan.product_id) return;
+        planCounts.set(plan.product_id, (planCounts.get(plan.product_id) ?? 0) + 1);
+      });
+      setInsights({
+        singlePlanProducts: (products ?? []).filter(
+          (p) => (planCounts.get(p.product_id) ?? 0) <= 1,
+        ).length,
+        lowDemos: (demos ?? []).filter(
+          (d) => d.total_views > 0 && d.conversions / d.total_views < 0.05,
+        ).length,
+        lowStock: (inventory ?? []).filter(
+          (i) => i.stock_type !== 'unlimited' && i.available_stock <= i.low_threshold,
+        ).length,
+      });
 
       if (products) {
         setStats({
@@ -238,21 +261,38 @@ const PMDashboard: React.FC<PMDashboardProps> = ({ onNavigate, onAddProduct }) =
           <CardContent className="space-y-4">
             <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
               <p className="text-xs font-medium text-amber-500">Pricing Suggestion</p>
-              <p className="text-xs text-muted-foreground mt-1">3 products may benefit from tier-based pricing based on market analysis.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {insights.singlePlanProducts > 0
+                  ? `${insights.singlePlanProducts} product${insights.singlePlanProducts === 1 ? '' : 's'} have one or no pricing plan — consider tier-based pricing.`
+                  : 'Every product has multiple pricing plans configured.'}
+              </p>
               <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs" onClick={() => onNavigate('pricing-plans')}>
                 Review <ArrowRight className="w-3 h-3 ml-1" />
               </Button>
             </div>
             <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
               <p className="text-xs font-medium text-blue-500">Demo Performance</p>
-              <p className="text-xs text-muted-foreground mt-1">2 demos have low engagement. Consider updating content.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {insights.lowDemos > 0
+                  ? `${insights.lowDemos} demo${insights.lowDemos === 1 ? '' : 's'} convert below 5%. Consider updating content.`
+                  : 'All demos are converting above 5%.'}
+              </p>
               <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs" onClick={() => onNavigate('demo-management')}>
                 View Demos <ArrowRight className="w-3 h-3 ml-1" />
               </Button>
             </div>
-            <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <p className="text-xs font-medium text-green-500">Inventory Alert</p>
-              <p className="text-xs text-muted-foreground mt-1">All license allocations are healthy. No action needed.</p>
+            <div className={`p-3 rounded-lg border ${insights.lowStock > 0 ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
+              <p className={`text-xs font-medium ${insights.lowStock > 0 ? 'text-red-500' : 'text-green-500'}`}>Inventory Alert</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {insights.lowStock > 0
+                  ? `${insights.lowStock} item${insights.lowStock === 1 ? '' : 's'} at or below the low-stock threshold.`
+                  : 'All license allocations are healthy. No action needed.'}
+              </p>
+              {insights.lowStock > 0 && (
+                <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs" onClick={() => onNavigate('inventory')}>
+                  View Inventory <ArrowRight className="w-3 h-3 ml-1" />
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

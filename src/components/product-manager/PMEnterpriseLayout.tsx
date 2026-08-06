@@ -87,6 +87,7 @@ type PMSection =
   | 'pricing-plans' 
   | 'inventory' 
   | 'orders' 
+  | 'licenses'
   | 'analytics' 
   | 'activity'
   | 'settings'

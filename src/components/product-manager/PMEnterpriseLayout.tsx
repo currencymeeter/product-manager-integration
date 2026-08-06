@@ -9,6 +9,7 @@ import PMPricingPlans from './PMPricingPlans';
 import PMInventory from './PMInventory';
 import PMOrders from './PMOrders';
 import PMAnalytics from './PMAnalytics';
+import PMLicenseManager from './PMLicenseManager';
 import PMCategories from './PMCategories';
 import PMProductForm from './PMProductForm';
 import PMActivityLog from './PMActivityLog';
@@ -232,6 +233,8 @@ const PMEnterpriseLayout: React.FC<PMEnterpriseLayoutProps> = ({ viewOnly = fals
         return <PMInventory />;
       case 'orders':
         return <PMOrders />;
+      case 'licenses':
+        return <PMLicenseManager />;
       case 'analytics':
         return <PMAnalytics />;
       case 'activity':

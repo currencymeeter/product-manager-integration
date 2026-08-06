@@ -222,22 +222,20 @@ const PMAnalytics: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    { name: 'USA - New York', sales: 245, trend: 12 },
-                    { name: 'UK - London', sales: 189, trend: 8 },
-                    { name: 'Germany - Berlin', sales: 156, trend: -3 },
-                    { name: 'India - Mumbai', sales: 134, trend: 15 },
-                  ].map((franchise) => (
+                  {franchiseData.map((franchise) => (
                     <div key={franchise.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
                       <span className="text-sm">{franchise.name}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold">{franchise.sales}</span>
-                        <Badge variant={franchise.trend >= 0 ? 'default' : 'destructive'} className="text-xs">
-                          {franchise.trend >= 0 ? '+' : ''}{franchise.trend}%
+                        <Badge variant={franchise.enabled ? 'default' : 'destructive'} className="text-xs">
+                          {franchise.franchises} franchises
                         </Badge>
                       </div>
                     </div>
                   ))}
+                  {franchiseData.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No franchise access records yet.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -246,27 +244,23 @@ const PMAnalytics: React.FC = () => {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  Reseller Contribution
+                  Revenue by Product
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    { name: 'TechPro Solutions', sales: 89, trend: 22 },
-                    { name: 'Digital Partners', sales: 67, trend: 15 },
-                    { name: 'CloudFirst Inc', sales: 45, trend: 8 },
-                    { name: 'Enterprise Plus', sales: 34, trend: -5 },
-                  ].map((reseller) => (
-                    <div key={reseller.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
-                      <span className="text-sm">{reseller.name}</span>
+                  {revenueByProduct.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                      <span className="text-sm">{item.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold">{reseller.sales}</span>
-                        <Badge variant={reseller.trend >= 0 ? 'default' : 'destructive'} className="text-xs">
-                          {reseller.trend >= 0 ? '+' : ''}{reseller.trend}%
-                        </Badge>
+                        <span className="font-mono font-bold">${item.revenue.toLocaleString()}</span>
+                        <Badge variant="secondary" className="text-xs">{item.units} units</Badge>
                       </div>
                     </div>
                   ))}
+                  {revenueByProduct.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No orders recorded yet.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

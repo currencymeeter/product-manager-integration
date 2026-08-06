@@ -95,7 +95,22 @@ const menuItems: MenuItem[] = [
       { id: 'software-profile', label: 'Software Profile', icon: FileText },
     ]
   },
-  
+
+  // 2b. COMMERCE & SALES
+  {
+    id: 'commerce',
+    label: 'Commerce & Sales',
+    icon: BarChart3,
+    children: [
+      { id: 'pricing-plans', label: 'Pricing Plans', icon: Layers },
+      { id: 'inventory', label: 'Inventory', icon: Package },
+      { id: 'orders', label: 'Orders', icon: Box },
+      { id: 'licenses', label: 'License Manager', icon: Key },
+      { id: 'demo-management', label: 'Demo Management', icon: Eye },
+      { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    ]
+  },
+
   // 3. PRODUCT STRUCTURE (MANDATORY HIERARCHY)
   { 
     id: 'product-structure', 

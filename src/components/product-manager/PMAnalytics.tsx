@@ -33,6 +33,10 @@ const PMAnalytics: React.FC = () => {
   const productPerformance: AnalyticsData[] = data?.performance ?? [];
   const demoFunnel: { stage: string; count: number; percentage: number }[] = data?.demoFunnel ?? [];
   const countryData: { country: string; sales: number; percentage: number }[] = data?.countryData ?? [];
+  const summary = data?.summary ?? { unitsSold: 0, revenue: 0, demoViews: 0, conversionRate: 0 };
+  const revenueByProduct: { name: string; units: number; revenue: number }[] = data?.revenueByProduct ?? [];
+  const franchiseData: { name: string; franchises: number; enabled: boolean; sales: number }[] = data?.franchiseData ?? [];
+  const maxPerf = Math.max(1, ...productPerformance.map((p) => p.value));
 
   return (
     <div className="p-6 space-y-6">
@@ -67,25 +71,17 @@ const PMAnalytics: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Package className="w-5 h-5 text-blue-500" />
-              <Badge variant="secondary" className="text-green-500">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                12%
-              </Badge>
             </div>
-            <p className="text-2xl font-bold">156</p>
-            <p className="text-xs text-muted-foreground">Products Sold</p>
+            <p className="text-2xl font-bold">{summary.unitsSold.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">Units Sold</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <MonitorPlay className="w-5 h-5 text-purple-500" />
-              <Badge variant="secondary" className="text-green-500">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                8%
-              </Badge>
             </div>
-            <p className="text-2xl font-bold">1,250</p>
+            <p className="text-2xl font-bold">{summary.demoViews.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">Demo Views</p>
           </CardContent>
         </Card>
@@ -93,12 +89,8 @@ const PMAnalytics: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Users className="w-5 h-5 text-cyan-500" />
-              <Badge variant="secondary" className="text-green-500">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                15%
-              </Badge>
             </div>
-            <p className="text-2xl font-bold">7.04%</p>
+            <p className="text-2xl font-bold">{summary.conversionRate.toFixed(2)}%</p>
             <p className="text-xs text-muted-foreground">Conversion Rate</p>
           </CardContent>
         </Card>
@@ -106,12 +98,8 @@ const PMAnalytics: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <DollarSign className="w-5 h-5 text-emerald-500" />
-              <Badge variant="secondary" className="text-green-500">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                22%
-              </Badge>
             </div>
-            <p className="text-2xl font-bold">$45,678</p>
+            <p className="text-2xl font-bold">${summary.revenue.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">Revenue</p>
           </CardContent>
         </Card>
@@ -146,7 +134,7 @@ const PMAnalytics: React.FC = () => {
                         </Badge>
                       </div>
                     </div>
-                    <Progress value={(product.value / 250) * 100} className={`h-2 [&>div]:${product.color}`} />
+                    <Progress value={(product.value / maxPerf) * 100} className={`h-2 [&>div]:${product.color}`} />
                   </div>
                 </div>
               ))}
@@ -234,22 +222,20 @@ const PMAnalytics: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    { name: 'USA - New York', sales: 245, trend: 12 },
-                    { name: 'UK - London', sales: 189, trend: 8 },
-                    { name: 'Germany - Berlin', sales: 156, trend: -3 },
-                    { name: 'India - Mumbai', sales: 134, trend: 15 },
-                  ].map((franchise) => (
+                  {franchiseData.map((franchise) => (
                     <div key={franchise.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
                       <span className="text-sm">{franchise.name}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold">{franchise.sales}</span>
-                        <Badge variant={franchise.trend >= 0 ? 'default' : 'destructive'} className="text-xs">
-                          {franchise.trend >= 0 ? '+' : ''}{franchise.trend}%
+                        <Badge variant={franchise.enabled ? 'default' : 'destructive'} className="text-xs">
+                          {franchise.franchises} franchises
                         </Badge>
                       </div>
                     </div>
                   ))}
+                  {franchiseData.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No franchise access records yet.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -258,27 +244,23 @@ const PMAnalytics: React.FC = () => {
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  Reseller Contribution
+                  Revenue by Product
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    { name: 'TechPro Solutions', sales: 89, trend: 22 },
-                    { name: 'Digital Partners', sales: 67, trend: 15 },
-                    { name: 'CloudFirst Inc', sales: 45, trend: 8 },
-                    { name: 'Enterprise Plus', sales: 34, trend: -5 },
-                  ].map((reseller) => (
-                    <div key={reseller.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
-                      <span className="text-sm">{reseller.name}</span>
+                  {revenueByProduct.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                      <span className="text-sm">{item.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold">{reseller.sales}</span>
-                        <Badge variant={reseller.trend >= 0 ? 'default' : 'destructive'} className="text-xs">
-                          {reseller.trend >= 0 ? '+' : ''}{reseller.trend}%
-                        </Badge>
+                        <span className="font-mono font-bold">${item.revenue.toLocaleString()}</span>
+                        <Badge variant="secondary" className="text-xs">{item.units} units</Badge>
                       </div>
                     </div>
                   ))}
+                  {revenueByProduct.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No orders recorded yet.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

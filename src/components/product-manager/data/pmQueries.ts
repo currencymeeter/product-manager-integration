@@ -319,10 +319,13 @@ export async function resolveAbuseAlert(id: string, resolved: boolean) {
 const PALETTE = ['bg-blue-500', 'bg-green-500', 'bg-amber-500', 'bg-purple-500', 'bg-cyan-500', 'bg-pink-500'];
 
 export async function fetchAnalytics() {
-  const [perf, funnel, countries] = await Promise.all([
+  const [perf, funnel, countries, orders, demos, franchises] = await Promise.all([
     supabase.from('pm_product_performance').select('product_name, sales, change_percent, period_month').order('sales', { ascending: false }),
     supabase.from('pm_demo_funnel').select('stage, count, display_order').order('display_order'),
     supabase.from('pm_country_sales').select('country, sales').order('sales', { ascending: false }),
+    supabase.from('product_orders').select('product_name, quantity, total, status'),
+    supabase.from('demos').select('total_views, conversions'),
+    supabase.from('pm_country_access').select('name, country_code, franchises, enabled').order('franchises', { ascending: false }),
   ]);
 
   const performance = rows<any>(perf).map((p, i) => ({
@@ -348,7 +351,39 @@ export async function fetchAnalytics() {
     percentage: Math.round((c.sales / countryTotal) * 100),
   }));
 
-  return { performance, demoFunnel, countryData };
+  const orderRows = rows<any>(orders).filter((o) => o.status !== 'cancelled');
+  const demoRows = rows<any>(demos);
+  const unitsSold = orderRows.reduce((s, o) => s + (o.quantity || 0), 0);
+  const revenue = orderRows.reduce((s, o) => s + Number(o.total || 0), 0);
+  const demoViews = demoRows.reduce((s, d) => s + (d.total_views || 0), 0);
+  const conversions = demoRows.reduce((s, d) => s + (d.conversions || 0), 0);
+  const conversionRate = demoViews ? (conversions / demoViews) * 100 : 0;
+
+  const revenueByProduct = Object.values(
+    orderRows.reduce((acc: Record<string, { name: string; units: number; revenue: number }>, o) => {
+      const key = o.product_name;
+      acc[key] = acc[key] || { name: key, units: 0, revenue: 0 };
+      acc[key].units += o.quantity || 0;
+      acc[key].revenue += Number(o.total || 0);
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.revenue - a.revenue);
+
+  const franchiseData = rows<any>(franchises).map((f) => ({
+    name: `${f.name} (${f.country_code})`,
+    franchises: f.franchises,
+    enabled: f.enabled,
+    sales: countryRows.find((c) => c.country === f.name)?.sales ?? 0,
+  }));
+
+  return {
+    performance,
+    demoFunnel,
+    countryData,
+    summary: { unitsSold, revenue, demoViews, conversionRate },
+    revenueByProduct,
+    franchiseData,
+  };
 }
 
 // ---------- Software profile ----------

@@ -51,10 +51,11 @@ test.describe("KPI cards and tables match backend rows", () => {
 
       const spy = spyOnQueries(page);
       const content = await gotoSection(page, section(screen.id));
-      const text = await content.innerText();
 
       // The screen queried the very table it displays.
-      expect(pmTablesQueried(spy)).toContain(screen.table);
+      await expect
+        .poll(() => pmTablesQueried(spy), { message: `${screen.id} never queried ${screen.table}` })
+        .toContain(screen.table);
 
       if (screen.columns[0] === "*") return; // presence of the query is the contract here
 
@@ -65,17 +66,21 @@ test.describe("KPI cards and tables match backend rows", () => {
           .filter((v) => v !== null && v !== undefined && String(v).length > 0)
           .map((v) => String(v));
         expect(values.length, `${screen.table}.${column} is empty in the backend`).toBeGreaterThan(0);
-        const rendered = values.some((v) => text.includes(v));
-        expect(
-          rendered,
+        const pattern = new RegExp(values.map(escapeRegExp).join("|"));
+        await expect(
+          content,
           `${screen.id} does not render any ${screen.table}.${column} value (expected one of ${values
             .slice(0, 5)
             .join(", ")})`,
-        ).toBeTruthy();
+        ).toContainText(pattern);
       }
     });
   }
 });
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 test("dashboard KPI counts equal backend row counts", async ({ page, request }) => {
   const [products, orders, deployments] = await Promise.all([
@@ -86,15 +91,15 @@ test("dashboard KPI counts equal backend row counts", async ({ page, request }) 
 
   const spy = spyOnQueries(page);
   const content = await gotoSection(page, section("dashboard"));
-  const text = await content.innerText();
-
-  expect(pmTablesQueried(spy)).toContain("products");
+  await expect.poll(() => pmTablesQueried(spy)).toContain("products");
   expect(products).toBeGreaterThan(0);
   expect(orders).toBeGreaterThan(0);
   expect(deployments).toBeGreaterThan(0);
 
   // The product KPI card shows the live row count, not a baked-in number.
-  expect(text, "dashboard does not show the live product count").toContain(String(products));
+  await expect(content, "dashboard does not show the live product count").toContainText(
+    String(products),
+  );
 
   // Sidebar quick-stat is fed by the same query.
   const sidebarProducts = page.locator("aside, div", { hasText: "Products" }).first();

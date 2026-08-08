@@ -38,7 +38,8 @@ const SCREENS: Array<{
   // The Deploy screen is a launch form (product/environment/server pickers); the
   // contract here is that it reads the live deployment table, not that it lists rows.
   { id: "deploy", table: "pm_deployments", columns: ["*"] },
-  { id: "deployment-history", table: "pm_deployments", columns: ["product_name", "version"] },
+  // Under Activity & Audit, "Deployment History" renders the immutable action log.
+  { id: "deployment-history", table: "product_action_logs", columns: ["product_name"] },
   { id: "deployment-logs", table: "pm_deployment_logs", columns: ["*"] },
   { id: "api-key-binding", table: "pm_api_keys", columns: ["name"] },
   { id: "abuse-protection", table: "pm_abuse_alerts", columns: ["product_name"] },

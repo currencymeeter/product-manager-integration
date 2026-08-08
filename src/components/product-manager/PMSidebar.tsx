@@ -342,6 +342,8 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
                   onClick={() => handleItemClick(item)}
                   disabled={item.locked}
                   data-testid={`pm-nav-${item.id}`}
+                  aria-expanded={hasChildren ? isExpanded : undefined}
+                  aria-controls={hasChildren ? `pm-nav-group-${item.id}` : undefined}
                   className={cn(
                     "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all",
                     active
@@ -367,9 +369,12 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
                 {/* Children */}
                 {hasChildren && isExpanded && (
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
+                    id={`pm-nav-group-${item.id}`}
+                    data-testid={`pm-nav-group-${item.id}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
                     className="ml-4 mt-0.5 space-y-0.5 border-l border-border/30 pl-2"
                   >
                     {item.children?.map((child) => {

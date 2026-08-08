@@ -178,8 +178,19 @@ export async function gotoSection(page: Page, section: Section) {
   if (section.id !== "dashboard") {
     const child = page.getByTestId(`pm-nav-${section.id}`);
     await child.scrollIntoViewIfNeeded();
-    // Sonner toasts from earlier navigations can overlay the sidebar; force past them.
-    await child.click({ timeout: 15_000, force: true });
+    // Clicks fired before React hydration are dropped, so retry until the
+    // layout actually switches sections.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await child.click({ timeout: 15_000, force: true });
+      try {
+        await expect(content).toHaveAttribute("data-active-section", section.id, {
+          timeout: 3_000,
+        });
+        break;
+      } catch {
+        /* not hydrated yet — click again */
+      }
+    }
   }
 
   await expect(content).toHaveAttribute("data-active-section", section.id);

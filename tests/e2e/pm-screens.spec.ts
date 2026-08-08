@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./diagnostics";
 import { SECTIONS, gotoSection, pmTablesQueried, spyOnQueries } from "./pm-helpers";
 
 /**

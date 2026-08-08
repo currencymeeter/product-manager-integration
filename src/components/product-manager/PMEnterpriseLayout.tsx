@@ -259,7 +259,7 @@ const PMEnterpriseLayout: React.FC<PMEnterpriseLayoutProps> = ({ viewOnly = fals
       />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" data-testid="pm-content" data-active-section={activeSection}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeSection}

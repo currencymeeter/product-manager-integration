@@ -341,6 +341,7 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
                 <button
                   onClick={() => handleItemClick(item)}
                   disabled={item.locked}
+                  data-testid={`pm-nav-${item.id}`}
                   className={cn(
                     "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all",
                     active
@@ -377,6 +378,7 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
                         <button
                           key={child.id}
                           onClick={() => handleChildClick(child.id, child.label)}
+                          data-testid={`pm-nav-${child.id}`}
                           className={cn(
                             "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-all",
                             isActive(child.id)

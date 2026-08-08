@@ -173,15 +173,18 @@ export async function gotoSection(page: Page, section: Section) {
 
   if (section.group) {
     const groupButton = page.getByTestId(`pm-nav-${section.group}`);
+    await groupButton.scrollIntoViewIfNeeded();
     await groupButton.click();
     const child = page.getByTestId(`pm-nav-${section.id}`);
     if (!(await child.isVisible().catch(() => false))) {
       await groupButton.click(); // group was already expanded and we collapsed it
     }
+    await child.waitFor({ state: "visible" });
+    await child.scrollIntoViewIfNeeded();
   }
 
   if (section.id !== "dashboard") {
-    await page.getByTestId(`pm-nav-${section.id}`).click();
+    await page.getByTestId(`pm-nav-${section.id}`).click({ timeout: 15_000 });
   }
 
   await expect(content).toHaveAttribute("data-active-section", section.id);

@@ -237,7 +237,7 @@ export async function fetchRows(
 }
 
 export async function countRows(request: APIRequestContext, table: string): Promise<number> {
-  const res = await request.get(`${SUPABASE_URL}/rest/v1/${table}?select=id`, {
+  const res = await request.get(`${SUPABASE_URL}/rest/v1/${table}?select=*`, {
     headers: {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,

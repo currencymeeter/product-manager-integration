@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./diagnostics";
 import {
   SECTIONS,
   countRows,
@@ -35,7 +35,11 @@ const SCREENS: Array<{
   { id: "role-visibility", table: "pm_roles", columns: ["name"] },
   { id: "country-control", table: "pm_country_access", columns: ["*"] },
   { id: "deployment-approval", table: "pm_approvals", columns: ["title"], query: "select=*&type=eq.deployment&limit=5" },
-  { id: "deploy", table: "pm_deployments", columns: ["product_name", "version"] },
+  // The Deploy screen is a launch form (product/environment/server pickers); the
+  // contract here is that it reads the live deployment table, not that it lists rows.
+  { id: "deploy", table: "pm_deployments", columns: ["*"] },
+  // Under Activity & Audit, "Deployment History" renders the immutable action log.
+  { id: "deployment-history", table: "product_action_logs", columns: ["product_name"] },
   { id: "deployment-logs", table: "pm_deployment_logs", columns: ["*"] },
   { id: "api-key-binding", table: "pm_api_keys", columns: ["name"] },
   { id: "abuse-protection", table: "pm_abuse_alerts", columns: ["product_name"] },

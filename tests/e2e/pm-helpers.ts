@@ -172,24 +172,44 @@ export async function gotoSection(page: Page, section: Section) {
   await expect(content).toBeVisible();
 
   if (section.group) {
-    const groupButton = page.getByTestId(`pm-nav-${section.group}`);
-    await groupButton.scrollIntoViewIfNeeded();
-    await groupButton.click();
-    const child = page.getByTestId(`pm-nav-${section.id}`);
-    if (!(await child.isVisible().catch(() => false))) {
-      await groupButton.click(); // group was already expanded and we collapsed it
-    }
-    await child.waitFor({ state: "visible" });
-    await child.scrollIntoViewIfNeeded();
+    await expandGroup(page, section.group);
   }
 
   if (section.id !== "dashboard") {
-    await page.getByTestId(`pm-nav-${section.id}`).click({ timeout: 15_000 });
+    const child = page.getByTestId(`pm-nav-${section.id}`);
+    await child.scrollIntoViewIfNeeded();
+    // Sonner toasts from earlier navigations can overlay the sidebar; force past them.
+    await child.click({ timeout: 15_000, force: true });
   }
 
   await expect(content).toHaveAttribute("data-active-section", section.id);
   await page.waitForLoadState("networkidle").catch(() => undefined);
   return content;
+}
+
+/**
+ * Expand a sidebar group deterministically. The group button owns
+ * `aria-expanded`, so we drive that state instead of guessing from child
+ * visibility (which raced with the expand animation).
+ */
+export async function expandGroup(page: Page, group: string) {
+  const groupButton = page.getByTestId(`pm-nav-${group}`);
+  await groupButton.waitFor({ state: "visible" });
+  await groupButton.scrollIntoViewIfNeeded();
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+      await groupButton.click({ force: true });
+    }
+    try {
+      await expect(groupButton).toHaveAttribute("aria-expanded", "true", { timeout: 3_000 });
+      await page.getByTestId(`pm-nav-group-${group}`).waitFor({ state: "visible", timeout: 3_000 });
+      return;
+    } catch {
+      /* retry */
+    }
+  }
+  throw new Error(`sidebar group ${group} never expanded`);
 }
 
 /** Read rows straight from the Product Manager backend for expected-value assertions. */

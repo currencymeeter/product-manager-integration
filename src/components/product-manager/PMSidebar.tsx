@@ -252,17 +252,40 @@ const menuItems: MenuItem[] = [
   },
 ];
 
+const COLLAPSE_KEY = 'sv:pm-sidebar:collapsed';
+
 const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, stats }) => {
   const [expandedItems, setExpandedItems] = React.useState<string[]>(['software-products']);
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [query, setQuery] = React.useState('');
+
+  React.useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   const toggleExpand = (id: string) => {
-    setExpandedItems(prev => 
+    setExpandedItems(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
   const isActive = (id: string) => activeSection === id;
-  const isChildActive = (item: MenuItem) => 
+  const isChildActive = (item: MenuItem) =>
     item.children?.some(child => activeSection === child.id);
 
   const handleItemClick = (item: MenuItem) => {
@@ -283,118 +306,210 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
     });
   };
 
+  const q = query.trim().toLowerCase();
+  const visibleItems = React.useMemo(() => {
+    if (!q) return menuItems;
+    return menuItems
+      .map((item) => {
+        if (!item.children) {
+          return item.label.toLowerCase().includes(q) ? item : null;
+        }
+        const kids = item.children.filter((c) => c.label.toLowerCase().includes(q));
+        if (item.label.toLowerCase().includes(q)) return item;
+        return kids.length > 0 ? { ...item, children: kids } : null;
+      })
+      .filter(Boolean) as MenuItem[];
+  }, [q]);
+
   return (
-    <div className="w-72 border-r border-border/50 bg-card/30 backdrop-blur-xl flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center">
-            <Package className="w-5 h-5 text-white" />
+    <aside
+      className={cn(
+        'flex flex-col shrink-0 h-full border-r border-border bg-background/80 backdrop-blur-xl transition-[width] duration-200',
+        collapsed ? 'w-[72px]' : 'w-[264px]'
+      )}
+    >
+      {/* Brand header */}
+      <div
+        className={cn(
+          'flex h-16 items-center gap-2 border-b border-border px-3 shrink-0',
+          collapsed && 'justify-center px-0'
+        )}
+      >
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary-glow text-primary-foreground font-bold text-xs">
+          SV
+        </span>
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-tight">Software Vala</p>
+            <p className="truncate text-[11px] text-muted-foreground">Product Manager</p>
           </div>
-          <div>
-            <h2 className="font-semibold text-sm">Product & Deployment</h2>
-            <p className="text-xs text-muted-foreground">Manager Control</p>
-          </div>
-        </div>
+        )}
+        {!collapsed && (
+          <button
+            onClick={toggleCollapsed}
+            className="ml-auto grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* Policy Badge */}
-      <div className="p-3">
-        <div className="p-2.5 bg-primary/10 border border-primary/30 rounded-lg">
-          <div className="flex items-center gap-2 mb-1">
-            <Shield className="w-4 h-4 text-primary" />
-            <span className="text-xs font-medium text-primary">FULL CRUD MODE</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">Create • Edit • Delete • Deploy • Audit</p>
-        </div>
-      </div>
+      {collapsed && (
+        <button
+          onClick={toggleCollapsed}
+          className="mx-auto mt-3 grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
+          aria-label="Expand sidebar"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
 
-      {/* Quick Stats */}
-      {stats && (
-        <div className="px-3 pb-3 grid grid-cols-3 gap-2">
-          <div className="p-2 bg-secondary/50 rounded-lg text-center">
-            <p className="text-base font-bold text-primary">{stats.totalProducts}</p>
-            <p className="text-[8px] text-muted-foreground">Products</p>
+      {!collapsed && (
+        <>
+          <div className="px-3 pt-3 shrink-0">
+            <div className="focus-glow flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-1.5">
+              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Find a section…"
+                className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              />
+            </div>
           </div>
-          <div className="p-2 bg-secondary/50 rounded-lg text-center">
-            <p className="text-base font-bold text-amber-500">{stats.pendingDeployments || 0}</p>
-            <p className="text-[8px] text-muted-foreground">Pending</p>
-          </div>
-          <div className="p-2 bg-secondary/50 rounded-lg text-center">
-            <p className="text-base font-bold text-red-500">{stats.criticalIssues || 0}</p>
-            <p className="text-[8px] text-muted-foreground">Critical</p>
-          </div>
-        </div>
+
+          {stats && (
+            <div className="px-3 pt-3 grid grid-cols-3 gap-2 shrink-0">
+              <div className="rounded-xl border border-border bg-surface px-2 py-1.5 text-center">
+                <p className="text-sm font-bold text-primary-glow">{stats.totalProducts}</p>
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Products</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface px-2 py-1.5 text-center">
+                <p className="text-sm font-bold text-accent-amber">{stats.pendingDeployments || 0}</p>
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Pending</p>
+              </div>
+              <div className="rounded-xl border border-border bg-surface px-2 py-1.5 text-center">
+                <p className="text-sm font-bold text-accent-pink">{stats.criticalIssues || 0}</p>
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Critical</p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Navigation */}
       <ScrollArea className="flex-1">
-        <nav className="p-2 space-y-0.5">
-          {menuItems.map((item) => {
+        <nav className="px-2 py-3 space-y-2">
+          {visibleItems.map((item) => {
             const Icon = item.icon;
-            const hasChildren = item.children && item.children.length > 0;
-            const isExpanded = expandedItems.includes(item.id);
-            const active = isActive(item.id) || isChildActive(item);
+            const hasChildren = !!item.children && item.children.length > 0;
+            const isExpanded = q ? true : expandedItems.includes(item.id);
+            const active = isActive(item.id) || !!isChildActive(item);
+
+            if (!hasChildren) {
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleItemClick(item)}
+                  data-testid={`pm-nav-${item.id}`}
+                  title={item.label}
+                  className={cn(
+                    'group/item relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors duration-150',
+                    collapsed && 'justify-center px-0',
+                    active
+                      ? 'bg-primary/18 text-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
+                  )}
+                >
+                  {active && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-primary" />
+                  )}
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </button>
+              );
+            }
+
+            if (collapsed) {
+              return (
+                <div key={item.id} className="space-y-0.5 border-t border-border/60 pt-2">
+                  {item.children?.map((child) => {
+                    const ChildIcon = child.icon;
+                    return (
+                      <button
+                        key={child.id}
+                        onClick={() => handleChildClick(child.id, child.label)}
+                        data-testid={`pm-nav-${child.id}`}
+                        title={child.label}
+                        className={cn(
+                          'relative flex w-full items-center justify-center rounded-xl py-2 transition-colors',
+                          isActive(child.id)
+                            ? 'bg-primary/18 text-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
+                        )}
+                      >
+                        <ChildIcon className="h-4 w-4 shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            }
 
             return (
               <div key={item.id}>
                 <button
                   onClick={() => handleItemClick(item)}
-                  disabled={item.locked}
                   data-testid={`pm-nav-${item.id}`}
-                  aria-expanded={hasChildren ? isExpanded : undefined}
-                  aria-controls={hasChildren ? `pm-nav-group-${item.id}` : undefined}
+                  aria-expanded={isExpanded}
+                  aria-controls={`pm-nav-group-${item.id}`}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all",
-                    active
-                      ? "bg-primary/20 text-primary border border-primary/30"
-                      : item.locked
-                      ? "text-muted-foreground/50 cursor-not-allowed"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                    'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors',
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="flex-1 text-left truncate">{item.label}</span>
-                  {item.badge && (
-                    <Badge variant="secondary" className="text-[9px] h-4 px-1.5">
-                      {item.badge}
-                    </Badge>
-                  )}
-                  {item.locked && <Lock className="w-3 h-3" />}
-                  {hasChildren && (
-                    isExpanded ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-                  )}
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </span>
+                  <ChevronDown
+                    className={cn('h-3.5 w-3.5 shrink-0 transition-transform duration-200', isExpanded && 'rotate-180')}
+                  />
                 </button>
 
-                {/* Children */}
-                {hasChildren && isExpanded && (
+                {isExpanded && (
                   <motion.div
                     id={`pm-nav-group-${item.id}`}
                     data-testid={`pm-nav-group-${item.id}`}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.12 }}
-                    className="ml-4 mt-0.5 space-y-0.5 border-l border-border/30 pl-2"
+                    className="mt-0.5 space-y-0.5"
                   >
                     {item.children?.map((child) => {
                       const ChildIcon = child.icon;
+                      const childActive = isActive(child.id);
                       return (
                         <button
                           key={child.id}
                           onClick={() => handleChildClick(child.id, child.label)}
                           data-testid={`pm-nav-${child.id}`}
+                          title={child.label}
                           className={cn(
-                            "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] transition-all",
-                            isActive(child.id)
-                              ? "bg-primary/10 text-primary"
-                              : "text-muted-foreground hover:bg-secondary/30 hover:text-foreground"
+                            'relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors duration-150',
+                            childActive
+                              ? 'bg-primary/18 text-foreground font-medium'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'
                           )}
                         >
-                          <ChildIcon className="w-3 h-3 shrink-0" />
+                          {childActive && (
+                            <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-primary" />
+                          )}
+                          <ChildIcon className="h-4 w-4 shrink-0" />
                           <span className="truncate">{child.label}</span>
                           {child.badge && (
-                            <Badge variant="secondary" className="text-[8px] h-3.5 px-1 ml-auto">
+                            <Badge variant="secondary" className="ml-auto text-[9px] h-4 px-1.5">
                               {child.badge}
                             </Badge>
                           )}
@@ -410,13 +525,13 @@ const PMSidebar: React.FC<PMSidebarProps> = ({ activeSection, onSectionChange, s
       </ScrollArea>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border/50">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Activity className="w-3 h-3 text-green-500 animate-pulse" />
-          <span>System Active • v2.0</span>
+      <div className={cn('shrink-0 border-t border-border px-3 py-2.5', collapsed && 'px-2')}>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Activity className="h-3 w-3 text-accent-emerald animate-pulse shrink-0" />
+          {!collapsed && <span className="truncate">System Active • v2.0</span>}
         </div>
       </div>
-    </div>
+    </aside>
   );
 };
 
